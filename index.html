@@ -76,7 +76,8 @@ button{cursor:pointer}
 .chathead{display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:space-between;align-items:center}
 .mini{display:flex;gap:6px;align-items:center;font-size:.85rem}
 .mini input{accent-color:var(--accent)}
-.chat{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.chat{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;flex:0 0 auto}
+.chat>.msg,.chatbox>*{flex:0 0 auto}
 .chat:empty{display:none}
 .msg{padding:8px 11px;border-radius:10px;font-size:.93rem;white-space:pre-wrap;max-width:94%;overflow-wrap:anywhere}
 .msg.me{align-self:flex-end;background:var(--accent);color:var(--accent-fg)}
