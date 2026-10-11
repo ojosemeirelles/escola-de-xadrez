@@ -1,0 +1,666 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Escola de Xadrez</title><meta name="description" content="Jogue xadrez contra o Stockfish com treinador, puzzles e aulas."><meta name="theme-color" content="#2f6b45"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: tabuleiro e treinador à esquerda (sempre visíveis); à direita, o painel da aba ativa. Empilha no celular. */
+:root{
+  --bg:#f3f5f1; --surface:#ffffff; --fg:#17201a; --muted:#5d6b61; --line:#d5dcd3;
+  --accent:#2f6b45; --accent-fg:#ffffff; --soft:#e3ecdf;
+  --c0:#1f7a45; --c1:#4f7f63; --c2:#9a7400; --c3:#c05a12; --c4:#b3372b;
+  --sq-light:#ead9b5; --sq-dark:#5e8a5a; --sq-sel:#f2c94c; --sq-last:#c9d86a; --sq-hint:#7fb7e6;
+  --pw:#fdfdf8; --pb:#1b1b1b; --ev-w:#f6f3e8; --ev-b:#232b26;
+  --display:"Bricolage Grotesque","Trebuchet MS",sans-serif;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#101612; --surface:#18211b; --fg:#e7eee8; --muted:#9aa99e; --line:#2b3930;
+  --accent:#7cc493; --accent-fg:#0e1611; --soft:#213026;
+  --c0:#7cd39a; --c1:#9dbfa9; --c2:#e3c04f; --c3:#f0a060; --c4:#f08a7c;
+  --sq-light:#d9c9a3; --sq-dark:#4f7a4c; --sq-sel:#e0b83a; --sq-last:#b3c257; --sq-hint:#6aa3d4; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#101612; --surface:#18211b; --fg:#e7eee8; --muted:#9aa99e; --line:#2b3930;
+  --accent:#7cc493; --accent-fg:#0e1611; --soft:#213026;
+  --c0:#7cd39a; --c1:#9dbfa9; --c2:#e3c04f; --c3:#f0a060; --c4:#f08a7c;
+  --sq-light:#d9c9a3; --sq-dark:#4f7a4c; --sq-sel:#e0b83a; --sq-last:#b3c257; --sq-hint:#6aa3d4; color-scheme:dark }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--body);padding-inline:16px;padding-block:16px 48px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1,h2,h3{font-family:var(--display);line-height:1.15;margin:0;text-wrap:balance}
+h1{font-size:1.5rem;font-weight:700}
+h2{font-size:1.25rem;font-weight:700}
+h3{font-size:1rem;font-weight:700}
+p{margin:0}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;font-weight:500;font-size:.92rem}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn:disabled{opacity:.5;cursor:default}
+
+.top{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:space-between}
+.tabs{display:flex;gap:4px;overflow-x:auto;max-width:100%}
+.tabs button{border:0;background:none;padding:8px 12px;border-radius:8px;font-weight:500;white-space:nowrap;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--soft);color:var(--fg)}
+
+.main{display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:880px){.main{grid-template-columns:minmax(0,1fr)}}
+.left{display:flex;flex-direction:column;gap:12px;min-width:0}
+.evalrow{display:flex;align-items:center;gap:10px;font:500 .8rem var(--mono);color:var(--muted)}
+.evalbar{flex:1;height:10px;background:var(--ev-b);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.evalbar i{display:block;height:100%;width:50%;background:var(--ev-w);transition:width .4s}
+#evalTxt{min-width:9.5em;text-align:right}
+.boardbox{container-type:inline-size;width:100%}
+.board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;border-radius:6px;overflow:hidden;border:2px solid var(--fg)}
+.sq{position:relative;border:0;padding:0;display:flex;align-items:center;justify-content:center;font-size:9.6cqw;line-height:1;aspect-ratio:1;min-width:0}
+.sq.l{background:var(--sq-light)}.sq.d{background:var(--sq-dark)}
+.sq.last{background:var(--sq-last)}.sq.hint{background:var(--sq-hint)}.sq.sel{background:var(--sq-sel)}
+.sq.hm{box-shadow:inset 0 0 0 .9cqw #c0392b}.sq.ho{box-shadow:inset 0 0 0 .9cqw #1e8f4e}
+.sq.chk{background:radial-gradient(circle,#e0453a 30%,transparent 75%),var(--sq-light)}
+.pc.w{color:var(--pw);text-shadow:0 0 1px #000,0 0 1px #000,0 1px 2px #0009;-webkit-text-stroke:.6px #222}
+.pc.b{color:var(--pb);text-shadow:0 0 1px #fff8}
+.sq.tg::after{content:"";position:absolute;width:28%;height:28%;border-radius:50%;background:#0005}
+.sq.tg.cap::after{width:86%;height:86%;background:none;border:.9cqw solid #0005}
+.co{position:absolute;font:500 2.6cqw var(--mono);color:#0009;pointer-events:none}
+.co.f{right:3%;bottom:2%}.co.r{left:3%;top:2%}
+@media (prefers-reduced-motion:reduce){.evalbar i{transition:none}}
+
+.coach{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-height:7.5em}
+.coach small,.lab{font:500 .72rem var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#coachBody{display:flex;flex-direction:column;gap:8px;font-size:.95rem}
+.tag{display:inline-block;font:500 .72rem var(--mono);padding:1px 7px;border-radius:999px;border:1px solid currentColor;margin-right:4px;white-space:nowrap}
+.tag.c0{color:var(--c0)}.tag.c1{color:var(--c1)}.tag.c2{color:var(--c2)}.tag.c3{color:var(--c3)}.tag.c4{color:var(--c4)}.tag.cpu{color:var(--muted)}
+.line{font-family:var(--mono);font-size:.85rem;color:var(--muted);overflow-wrap:anywhere}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+.aibox{border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:4px}
+.aibox p{font-size:.95rem;white-space:pre-wrap}
+.ask{display:flex;flex-wrap:wrap;gap:8px}
+.ask input{flex:1;min-width:0;flex-basis:200px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:.92rem}
+
+.panel{min-width:0;display:flex;flex-direction:column;gap:16px}
+.panel>div{display:flex;flex-direction:column;gap:16px}
+.setup{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.setup label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--muted)}
+.setup select{padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:.92rem;color:var(--fg)}
+.aid{display:flex;gap:10px;align-items:flex-start;font-size:.9rem}
+.aid input{margin-top:.25em;accent-color:var(--accent);width:16px;height:16px;flex:0 0 auto}
+.aid span span{color:var(--muted);display:block;font-size:.82rem}
+.moves{display:flex;flex-wrap:wrap;gap:2px 2px;font:400 .88rem var(--mono);align-items:center;max-height:220px;overflow-y:auto}
+.moves .no{color:var(--muted);padding-left:6px}
+.moves button{border:0;background:none;padding:2px 5px;border-radius:5px}
+.moves button[aria-current="true"]{background:var(--soft)}
+.moves button.c2{color:var(--c2);font-weight:500}.moves button.c3{color:var(--c3);font-weight:500}.moves button.c4{color:var(--c4);font-weight:500}
+.box{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.muted{color:var(--muted);font-size:.88rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.card{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:4px}
+.card b{font-family:var(--display)}
+.card span{font-size:.86rem;color:var(--muted)}
+.card.done b::before{content:"✓ ";color:var(--c0)}
+.card[aria-current="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.text{display:flex;flex-direction:column;gap:10px;max-width:62ch;font-size:.95rem}
+.text ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:5px}
+.text b{font-weight:600}
+.mv{font-family:var(--mono);font-size:.92em;background:var(--soft);padding:1px 5px;border-radius:4px;white-space:nowrap}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.85rem}
+.pills button[aria-current="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pills button.done::before{content:"✓ ";color:var(--c0);font-weight:700}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Escola de Xadrez</h1>
+    <nav class="tabs" id="tabs" role="tablist">
+      <button role="tab" data-tab="play">Jogar</button>
+      <button role="tab" data-tab="puzzles">Puzzles</button>
+      <button role="tab" data-tab="drills">Treinos</button>
+      <button role="tab" data-tab="errs">Meus erros</button>
+      <button role="tab" data-tab="lessons">Aulas</button>
+    </nav>
+  </header>
+
+  <div class="main">
+    <section class="left">
+      <div class="evalrow" id="evalrow"><div class="evalbar"><i id="evalFill"></i></div><span id="evalTxt">Equilíbrio</span></div>
+      <div class="boardbox"><div class="board" id="board"></div></div>
+      <div class="coach" aria-live="polite"><small id="coachLabel">Treinador</small><div id="coachBody"></div>
+        <div class="aibox" id="aiBox" hidden><small id="aiName"></small><p id="aiOut"></p></div></div>
+      <form class="ask" id="ask" hidden>
+        <input id="q" type="text" maxlength="200" autocomplete="off" placeholder="Pergunte ao treinador sobre esta posição" aria-label="Pergunta ao treinador">
+        <button class="btn pri" id="btnAsk">Perguntar</button>
+        <button class="btn" id="btnStop" type="button" hidden>Parar</button>
+      </form>
+      <div class="acts">
+        <button class="btn" id="btnHint">Dica</button>
+        <button class="btn" id="btnUndo">Voltar lance</button>
+        <button class="btn" id="btnLive" hidden>Voltar à posição atual</button>
+        <button class="btn" id="btnReset" hidden>Reiniciar</button>
+        <button class="btn pri" id="btnNext" hidden>Próximo</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div id="tab-play">
+        <div class="setup">
+          <label for="level">Nível da máquina<select id="level"><option value="0">Iniciante</option><option value="1">Casual</option><option value="2">Clube</option><option value="3">Forte</option></select></label>
+          <label for="color">Você joga de<select id="color"><option value="w">Brancas</option><option value="b">Pretas</option></select></label>
+          <label for="coachSel">Treinador<select id="coachSel"></select></label>
+          <button class="btn pri" id="btnNew">Nova partida</button>
+        </div>
+        <p class="muted" id="coachInfo"></p>
+        <label class="aid"><input type="checkbox" id="aid"><span>Ajuda visual<span>Borda vermelha: peça sua em perigo. Borda verde: peça dele que dá para ganhar.</span></span></label>
+        <div class="box"><span class="lab" id="gameLab">Partida</span><p class="muted" id="opening"></p><div class="moves" id="moves"></div><p class="muted">Toque em um lance para rever a posição e o comentário.</p></div>
+        <div class="box" id="summary" hidden></div>
+        <p class="muted" id="stats"></p>
+      </div>
+      <div id="tab-puzzles" hidden>
+        <div><h2>Puzzles táticos</h2><p class="muted" id="pzStats"></p></div>
+        <div class="pills" id="pzThemes"></div>
+        <p class="muted">Cada puzzle começa com o lance do adversário. Errou, ele volta amanhã; acertou de primeira, volta em 3, 10 e 30 dias, até fixar. Todas as soluções foram verificadas pelo Stockfish.</p>
+      </div>
+      <div id="tab-drills" hidden>
+        <div><h2>Treinos contra a máquina</h2><p class="muted">Posições para jogar até o fim. A máquina defende; o treinador comenta cada lance.</p></div>
+        <div class="cards" id="drills"></div>
+      </div>
+      <div id="tab-errs" hidden>
+        <div><h2>Meus erros</h2><p class="muted">Cada erro que você comete numa partida vira um exercício aqui. Ache um lance melhor na mesma posição.</p></div>
+        <div class="cards" id="errs"></div>
+      </div>
+      <div id="tab-lessons" hidden>
+        <div class="pills" id="wkSel"></div>
+        <div id="lessonHead"></div>
+        <div class="text" id="lessonText"></div>
+        <div class="box"><span class="lab">Exercícios da aula</span><div class="pills" id="exlist"></div></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="puzzles.js"></script>
+<script>
+const START='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const m=s=>'<span class="mv">'+s+'</span>';
+/*DATA*/
+const DRILLS=[
+ {t:'Mate com dama e rei',fen:'8/8/8/4k3/8/8/8/3QK3 w - - 0 1',g:'Dê mate. Use a dama para empurrar o rei até a borda, traga o seu rei e só então finalize. Cuidado com o afogamento.'},
+ {t:'Mate com torre e rei',fen:'8/8/8/4k3/8/8/8/R3K3 w - - 0 1',g:'Dê mate. A torre corta o rei numa fileira, o seu rei fica de frente para o dele e a torre dá o xeque que o empurra.'},
+ {t:'Mate com duas torres',fen:'8/8/8/4k3/8/8/8/R3K2R w - - 0 1',g:'Dê mate em escadinha: uma torre corta a fileira, a outra dá xeque na seguinte. Não precisa do rei.'},
+ {t:'Rei e peão contra rei',fen:'8/8/4k3/8/4K3/8/4P3/8 w - - 0 1',g:'Promova o peão. Seu rei vai na frente do peão; use o lance de peão de reserva para ganhar a oposição.'},
+ {t:'Peão a mais no final',fen:'8/ppp3k1/8/8/8/8/PPPP2K1/8 w - - 0 1',g:'Você tem um peão a mais. Ative o rei primeiro, crie um peão passado e promova.'},
+ {t:'Converter: dama a mais',fen:'rnb1kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',g:'Você tem a dama a mais. Desenvolva, faça o roque, troque peças e não entregue nada.'},
+ {t:'Converter: torre a mais',fen:'1nbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk - 0 1',g:'Você tem uma torre a mais. Jogue simples: desenvolva, troque peças e abra colunas para as torres.'},
+ {t:'Converter: cavalo a mais',fen:'r1bqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',g:'Uma peça menor a mais já ganha, mas exige técnica. Troque peças, não peões, e leve para o final.'},
+ {t:'Meio-jogo da Italiana',fen:'r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',g:'A Italiana já está no tabuleiro. Continue com c3, d3, roque e depois prepare d4.'}
+];
+const WEEKS=[
+{t:'Fundamentos',sub:'Princípios de abertura e a checagem antes de cada lance.',
+ lesson:`<p>No seu nível, a maioria das partidas se decide por uma peça entregue de graça. Antes de qualquer teoria, crie um hábito: <b>antes de cada lance, duas perguntas</b>.</p>
+ <ul><li><b>O que o último lance dele ameaça?</b> Olhe xeques, capturas e ataques.</li><li><b>A casa para onde vou está segura?</b> Deixo alguma peça sem defesa?</li></ul>
+ <h3>Os cinco princípios de abertura</h3>
+ <ul><li>Ocupe o centro com um peão (${m('e4')} ou ${m('d4')}).</li><li>Desenvolva cavalos e bispos antes de qualquer outra coisa.</li><li>Faça o roque cedo: o rei sai do centro e a torre entra no jogo.</li><li>Não mova a mesma peça duas vezes sem motivo.</li><li>Não saia com a dama cedo: ela vira alvo e você perde tempo.</li></ul>`,
+ ex:[
+ {id:'m1a',title:'Mate do corredor',fen:'6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1',side:'w',seq:['e1e8'],goal:'Brancas jogam e dão mate em 1.',hint:'O rei preto está preso atrás dos próprios peões.',why:'Os peões de f7, g7 e h7 tiram todas as casas de fuga. Por isso se abre uma "janela" (h3 ou h6) quando há torres no tabuleiro.'},
+ {id:'m1b',title:'Mate do pastor',fen:'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',side:'w',seq:['h5f7'],goal:'Brancas jogam e dão mate em 1.',hint:'Qual casa ao lado do rei preto só ele defende?',why:'f7 é o ponto mais fraco no início: só o rei o defende. Dama e bispo miram juntos nele. Conheça para não cair nisso.'},
+ {id:'m1c',title:'Mate abafado',fen:'6rk/6pp/8/6N1/8/8/6PP/6K1 w - - 0 1',side:'w',seq:['g5f7'],goal:'Brancas jogam e dão mate em 1.',hint:'O rei preto não tem nenhuma casa livre. Basta um xeque que não possa ser capturado.',why:'O rei está sufocado pelas próprias peças. Só o cavalo consegue dar esse xeque, porque ele salta.'},
+ {id:'m1d',title:'Mate do louco',fen:'rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2',side:'b',seq:['d8h4'],goal:'Pretas jogam e dão mate em 1.',hint:'As brancas abriram a diagonal do próprio rei.',why:'Mover os peões f e g cedo abre a diagonal e1-h4. É o mate mais rápido possível e mostra por que não se mexe nesses peões na abertura.'}
+ ]},
+{t:'Partida da Ópera',sub:'Paul Morphy, Paris, 1858: a partida de ensino mais famosa do xadrez.',
+ lesson:`<p>Morphy jogou esta partida num camarote da Ópera de Paris, contra o Duque de Brunswick e o Conde Isouard, que jogavam juntos. Em 17 lances ela mostra por que <b>desenvolvimento vale mais que material</b>.</p>
+ <ul><li>As brancas colocam <b>todas</b> as peças em jogo antes de atacar. No lance do mate, cada peça branca que restou participou.</li><li>As pretas movem peões, saem com a dama e deixam o rei no centro. Terminam com torre e bispo ainda na casa inicial.</li><li>Com vantagem de desenvolvimento, <b>abra linhas</b>: Morphy sacrifica um cavalo só para abrir o caminho até o rei.</li><li>Peças cravadas não defendem. Repare quantas vezes o cavalo e a torre de d7 ficam imóveis.</li></ul>
+ <p>Jogue os lances das brancas. A cada lance você recebe a ideia, não o lance pronto.</p>`,
+ ex:[
+ {id:'opera',title:'Morphy x Duque e Conde',fen:START,side:'w',seq:['e2e4','e7e5','g1f3','d7d6','d2d4','c8g4','d4e5','g4f3','d1f3','d6e5','f1c4','g8f6','f3b3','d8e7','b1c3','c7c6','c1g5','b7b5','c3b5','c6b5','c4b5','b8d7','e1c1','a8d8','d1d7','d8d7','h1d1','e7e6','b5d7','f6d7','b3b8','d7b8','d1d8'],
+  prompts:{0:'Ocupe o centro com o peão do rei.',2:'Desenvolva o cavalo atacando e5.',4:'Abra o centro: ataque e5 de novo, agora com o peão da dama.',6:'Capture o peão de e5. Se ele retomar com o peão, você troca as damas e ganha e5 com o cavalo.',8:'Recapture com a dama, que entra no jogo.',10:'Desenvolva o bispo criando uma ameaça de mate em f7.',12:'Ele defendeu f7. Ataque duas coisas com um lance: f7 e b7.',14:'Dá para ganhar o peão de b7, mas desenvolver vale mais. Traga o cavalo.',16:'Desenvolva a última peça menor, cravando o cavalo de f6.',18:'Ele ataca seu bispo com um peão, mas o rei dele está no centro. Sacrifique o cavalo para abrir linhas.',20:'Recapture com xeque.',22:'Rei em segurança e torre na coluna aberta no mesmo lance. O cavalo de d7 está cravado.',24:'Elimine o defensor: capture o cavalo cravado.',26:'Traga a última peça para o ataque. A torre de d7 também está cravada.',28:'Capture a torre com xeque.',30:'O cavalo de d7 é o único que protege d8. Sacrifique a dama para desviá-lo.',32:'Xeque-mate.'},
+  goal:'Jogue a Partida da Ópera com as brancas.',hint:'Pense no lance que desenvolve uma peça nova ou abre uma linha contra o rei, e não no que ganha material.',why:'Mate com torre e bispo, as duas únicas peças que restaram. As pretas terminam com a torre de h8 e o bispo de f8 sem ter feito um único lance. Desenvolvimento, linhas abertas e peças cravadas: é o método inteiro em 17 lances.'}
+ ]},
+{t:'Garfo e cravada',sub:'Dois ataques com um lance, e peças que não podem se mover.',
+ lesson:`<p><b>Garfo</b> é um lance que ataca duas coisas ao mesmo tempo. O adversário só salva uma. O cavalo é o melhor garfista, mas peão e dama também fazem.</p>
+ <p><b>Cravada</b> é quando uma peça não pode sair do lugar porque atrás dela está algo mais valioso. Se atrás está o rei, a peça fica proibida de se mover.</p>
+ <ul><li>Procure peças adversárias <b>sem defesa</b> e na <b>mesma linha</b>. É daí que nascem quase todas as táticas.</li><li>Garfo com xeque é o mais forte: ele tem que responder ao xeque e perde a outra peça.</li><li>Peça cravada é alvo: ataque-a de novo, de preferência com um peão.</li></ul>`,
+ ex:[
+ {id:'g1',title:'Garfo de cavalo',fen:'r3k3/ppp2ppp/8/3N4/8/8/PPP2PPP/4K3 w - - 0 1',side:'w',seq:['d5c7'],goal:'Brancas jogam e ganham a torre.',hint:'Procure uma casa de onde o cavalo dê xeque e ataque a torre.',why:'Xeque ao rei e ataque à torre de a8 no mesmo lance. O rei precisa sair e a torre cai.'},
+ {id:'g2',title:'Garfo de peão',fen:'4k3/ppp2ppp/2n1b3/8/3PP3/8/PP3PPP/4K3 w - - 0 1',side:'w',seq:['d4d5'],goal:'Brancas jogam e ganham uma peça.',hint:'Duas peças pretas estão lado a lado, com uma casa entre elas na fileira da frente.',why:'O peão ataca cavalo e bispo. Mesmo que o bispo capture o peão, o outro peão recaptura: uma peça por um peão.'},
+ {id:'g3',title:'Garfo de dama',fen:'r7/7k/8/8/8/8/8/4Q1K1 w - - 0 1',side:'w',seq:['e1e4'],goal:'Brancas jogam e ganham a torre.',hint:'Rei e torre pretos estão sem defesa. Existe uma casa que enxerga os dois?',why:'A dama dá xeque na diagonal e ataca a torre na outra diagonal. Peça sem defesa é sempre um convite à tática.'},
+ {id:'c1',title:'Cravada na coluna',fen:'4k3/ppp2ppp/8/4q3/8/8/PPP2PPP/R2R2K1 w - - 0 1',side:'w',seq:['d1e1'],goal:'Brancas jogam e ganham a dama.',hint:'Dama e rei pretos estão na mesma coluna.',why:'A dama não pode sair da coluna porque deixaria o rei em xeque. Ela só pode capturar a torre, que está defendida pela outra.'},
+ {id:'c2',title:'Cravada na diagonal',fen:'6k1/6pp/8/3r4/8/8/5PPP/3B2K1 w - - 0 1',side:'w',seq:['d1b3'],goal:'Brancas jogam e ganham a torre.',hint:'Torre e rei pretos estão na mesma diagonal.',why:'A torre fica cravada contra o rei e não pode se mover. No próximo lance o bispo a captura.'}
+ ]},
+{t:'Espeto e descoberto',sub:'Atacar a peça da frente para ganhar a de trás.',
+ lesson:`<p><b>Espeto</b> é a cravada ao contrário: você ataca a peça mais valiosa, ela sai, e você captura a que estava atrás.</p>
+ <p><b>Ataque descoberto</b> acontece quando uma peça sai da frente e abre a linha de outra. A peça que sai também pode criar uma ameaça, então são dois ataques com um lance.</p>
+ <ul><li>Se a peça que sai dá xeque, a que ficou atrás ganha o que estiver na linha.</li><li>Se a peça que fica atrás dá xeque (xeque descoberto), a que saiu pode capturar qualquer coisa.</li><li>No <b>xeque duplo</b> as duas dão xeque, e o rei é obrigado a se mover.</li></ul>`,
+ ex:[
+ {id:'e1',title:'Espeto de torre',fen:'4q3/8/8/4k3/8/8/8/R5K1 w - - 0 1',side:'w',seq:['a1e1','e5d5','e1e8'],goal:'Brancas jogam e ganham a dama.',hint:'Rei e dama pretos estão na mesma coluna.',why:'O xeque obriga o rei a sair da coluna, e a dama que estava atrás fica para a torre.'},
+ {id:'e2',title:'Espeto de bispo',fen:'1r6/8/8/4k3/8/8/8/4B1K1 w - - 0 1',side:'w',seq:['e1g3','e5e4','g3b8'],goal:'Brancas jogam e ganham a torre.',hint:'Rei e torre pretos estão na mesma diagonal.',why:'Mesmo mecanismo, agora na diagonal. Rei e peça pesada alinhados são sempre um sinal de alerta.'},
+ {id:'d1',title:'Ataque descoberto',fen:'3q2k1/5pp1/8/8/8/3B4/5PPP/3R2K1 w - - 0 1',side:'w',seq:['d3h7','g8h7','d1d8'],goal:'Brancas jogam e ganham a dama.',hint:'O seu bispo está na frente da torre. Tire-o com xeque.',why:'O bispo se sacrifica com xeque só para abrir a coluna. Enquanto o rei cuida do bispo, a torre captura a dama.'},
+ {id:'d2',title:'Xeque descoberto',fen:'1q2k3/8/8/4N3/8/8/8/4R1K1 w - - 0 1',side:'w',seq:['e5c6','e8f7','c6b8'],goal:'Brancas jogam e ganham a dama.',hint:'Quando o cavalo sair, a torre dá xeque. Leve o cavalo para atacar a dama.',why:'A torre dá o xeque e o cavalo, de graça, ataca a dama. As pretas não conseguem resolver as duas coisas.'}
+ ]},
+{t:'Italiana (brancas)',sub:'Planos, não decoreba.',
+ lesson:`<p>A Italiana aplica os cinco princípios quase lance a lance: peão no centro, cavalo, bispo, roque.</p>
+ <ul><li>${m('1.e4')} ocupa o centro e abre o bispo e a dama.</li><li>${m('2.Cf3')} desenvolve e ataca o peão de e5.</li><li>${m('3.Bc4')} mira em f7, o ponto fraco das pretas.</li><li>${m('c3')} e ${m('d3')} dão um centro sólido; mais tarde você prepara ${m('d4')}.</li><li>${m('O-O')} coloca o rei em segurança.</li></ul>
+ <h3>Plano de meio-jogo</h3>
+ <p>Depois do roque: torre em e1, cavalo de b1 via d2 até f1 e g3, e então a ruptura ${m('d4')} no centro. Depois da aula, jogue o treino "Meio-jogo da Italiana" contra a máquina.</p>`,
+ ex:[
+ {id:'it',title:'Linha principal',fen:START,side:'w',seq:['e2e4','e7e5','g1f3','b8c6','f1c4','f8c5','c2c3','g8f6','d2d3','d7d6','e1g1'],
+  prompts:{0:'Ocupe o centro com o peão do rei.',2:'Desenvolva uma peça atacando o peão de e5.',4:'Desenvolva o bispo para a casa de onde ele mira em f7.',6:'Prepare o centro: apoie um futuro d4 com um peão.',8:'Defenda o peão de e4 de forma sólida, abrindo o outro bispo.',10:'Rei em segurança.'},
+  goal:'Jogue a Italiana com as brancas.',hint:'A ordem é: peão do rei, cavalo, bispo, c3, d3, roque (mova o rei duas casas).',why:'Você chegou à posição-base da Italiana: centro sólido, peças menores desenvolvidas e rei rocado. Daqui o plano é Te1, Cbd2 e preparar d4.'}
+ ]},
+{t:'Finais de peão',sub:'Regra do quadrado e oposição.',
+ lesson:`<h3>Regra do quadrado</h3>
+ <p>Desenhe um quadrado do peão até a casa de coroação. Se o rei adversário, na vez dele, consegue entrar no quadrado, ele alcança o peão. Se não, o peão coroa sozinho.</p>
+ <h3>Oposição</h3>
+ <p>Reis frente a frente com uma casa entre eles: quem <b>não</b> tem a vez tem a oposição, porque o outro é obrigado a ceder passagem.</p>
+ <ul><li>Para ganhar com rei e peão contra rei, o seu rei vai <b>na frente</b> do peão, não atrás.</li><li>Para empatar, o rei defensor fica na frente do peão e, quando recuar, recua <b>em linha reta</b>.</li></ul>`,
+ ex:[
+ {id:'p1',title:'Regra do quadrado',fen:'8/8/8/8/P4k2/8/8/7K w - - 0 1',side:'w',seq:['a4a5'],goal:'Brancas jogam e ganham.',hint:'O rei preto está fora do quadrado do peão. Não dê tempo para ele entrar.',why:'Com o peão em a5, o quadrado vai de a5 a d8. O rei preto, em f4, não consegue entrar nele em um lance. Qualquer outro lance deixaria o rei alcançar o peão.'},
+ {id:'p2',title:'Defesa em linha reta',fen:'8/4k3/4P3/3K4/8/8/8/8 b - - 0 1',side:'b',seq:['e7e8'],goal:'Pretas jogam e empatam. Só um lance serve.',hint:'Recue em linha reta, para a casa de coroação do peão.',why:'Recuando reto, você pega a oposição quando o rei branco avançar: Rd6 Rd8, e7+ Re8, Re6 e é afogamento. Recuar para o lado perde.'}
+ ]},
+{t:'Meio-jogo',sub:'Peças ativas, colunas abertas e trocas.',
+ lesson:`<p>Quando não há tática, melhore a sua pior peça. Pergunte: qual das minhas peças está fazendo menos?</p>
+ <ul><li><b>Torres</b> querem colunas abertas. Uma torre na sétima fileira ataca os peões por trás e prende o rei.</li><li><b>Cavalos</b> querem casas avançadas e protegidas por peão.</li><li><b>Bispos</b> querem diagonais longas e livres.</li><li><b>Em vantagem material, troque peças</b> (não peões). Cada troca aproxima um final ganho.</li><li><b>Em desvantagem, evite trocas</b> e complique.</li></ul>
+ <h3>Peça solta cai</h3>
+ <p>A cada lance do adversário, verifique se a peça que ele moveu ficou defendida. Se não ficou, capture. Ligue a "Ajuda visual" na aba Jogar para treinar o olho.</p>`,
+ ex:[
+ {id:'s1',title:'Peça solta',fen:'rnbqk1nr/pppp1ppp/8/4p3/1b2P3/2P2N2/PP1P1PPP/RNBQKB1R w KQkq - 0 1',side:'w',seq:['c3b4'],goal:'As pretas acabaram de errar. Puna.',hint:'Alguma peça preta está atacada e sem defesa?',why:'O bispo foi para uma casa atacada por um peão, sem ninguém para recapturar. Antes de pensar em planos, sempre confira o que está de graça.'}
+ ]},
+{t:'Defesas (pretas)',sub:'1...e5 contra e4 e 1...d5 contra d4.',
+ lesson:`<p>De pretas, a ideia é a mesma: espelhar o centro, desenvolver e rocar.</p>
+ <h3>Contra ${m('1.e4')}: jogue ${m('1...e5')}</h3>
+ <ul><li>Defenda e5 com ${m('...Cc6')}.</li><li>Bispo em c5, cavalo em f6, ${m('...d6')} e roque.</li><li>Atenção a ataques em f7: ${m('Cg5')} com bispo em c4 exige que você já tenha o roque ou ${m('...d5')} pronto.</li></ul>
+ <h3>Contra ${m('1.d4')}: jogue ${m('1...d5')}</h3>
+ <ul><li>Contra ${m('2.c4')}, sustente o centro com ${m('...e6')}. Não capture em c4 por enquanto.</li><li>${m('...Cf6')}, ${m('...Be7')} e roque. Estrutura sólida, sem pontos fracos.</li></ul>`,
+ ex:[
+ {id:'pe',title:'Contra 1.e4',fen:START,side:'b',seq:['e2e4','e7e5','g1f3','b8c6','f1c4','f8c5','c2c3','g8f6','d2d3','d7d6','e1g1','e8g8'],
+  prompts:{1:'Responda no centro, espelhando o peão.',3:'O peão de e5 está atacado. Defenda desenvolvendo.',5:'Desenvolva o bispo para a diagonal ativa.',7:'Desenvolva o outro cavalo, atacando e4.',9:'Sustente e5 e abra o bispo de c8.',11:'Rei em segurança.'},
+  goal:'Jogue a defesa com as pretas.',hint:'Ordem: peão do rei, cavalo da dama, bispo em c5, cavalo do rei, d6, roque.',why:'Posição simétrica e saudável. Você tem as mesmas ideias das brancas: ...a6, ...Ba7 e, quando der, ...d5.'},
+ {id:'pd',title:'Contra 1.d4',fen:START,side:'b',seq:['d2d4','d7d5','c2c4','e7e6','b1c3','g8f6','c1g5','f8e7','e2e3','e8g8'],
+  prompts:{1:'Responda no centro, espelhando o peão.',3:'O peão de d5 está atacado. Sustente-o com outro peão, abrindo o bispo do rei.',5:'Desenvolva o cavalo do rei.',7:'O cavalo de f6 ficou cravado. Desfaça a cravada desenvolvendo.',9:'Rei em segurança.'},
+  goal:'Jogue o Gambito da Dama Recusado com as pretas.',hint:'Ordem: d5, e6, cavalo em f6, bispo em e7, roque.',why:'Estrutura clássica do Gambito da Dama Recusado. O plano seguinte é ...Cbd7, ...c6 e liberar o jogo com ...c5 ou ...e5.'}
+ ]},
+{t:'Ataque ao rei',sub:'Padrões de mate no rei rocado.',
+ lesson:`<p>Atacar o rei rocado é reconhecer padrões. Em geral você precisa de <b>duas peças</b> apontadas para a mesma casa ao lado do rei.</p>
+ <ul><li><b>Dama e bispo em h7</b>: bispo na diagonal b1-h7 e dama chegando em h7.</li><li><b>Casas escuras enfraquecidas</b>: se as pretas jogaram ${m('...g6')} e não têm bispo em g7, as casas f6, g7 e h8 ficam frágeis.</li><li><b>Corredor</b>: rei preso atrás de três peões e sem torre na primeira fileira.</li></ul>
+ <h3>Finais de torre: três ideias</h3>
+ <ul><li>Torre ativa vale mais que um peão.</li><li>Torre fica <b>atrás</b> do peão passado, seja seu ou dele.</li><li>Corte o rei adversário com a torre.</li></ul>`,
+ ex:[
+ {id:'r1',title:'Dama e bispo em h7',fen:'5rk1/5ppp/8/7Q/8/3B4/5PPP/6K1 w - - 0 1',side:'w',seq:['h5h7'],goal:'Brancas jogam e dão mate em 1.',hint:'Duas peças suas miram a mesma casa ao lado do rei.',why:'O bispo defende a dama em h7 e a torre preta tira a casa f8 do próprio rei. Um cavalo em f6 teria defendido h7: é por isso que se ataca esse cavalo antes.'},
+ {id:'r2',title:'Casas escuras fracas',fen:'6k1/5p1p/5Bp1/8/8/8/5PPP/3Q2K1 w - - 0 1',side:'w',seq:['d1d8'],goal:'Brancas jogam e dão mate em 1.',hint:'O bispo já tira g7 e h8 do rei. Falta o xeque na última fileira.',why:'Com o peão em g6 e sem bispo em g7, o bispo branco em f6 domina as casas de fuga. Qualquer xeque na oitava fileira é mate.'}
+ ]}
+];
+/*END*/
+const OPEN={
+ 'e4 e5':['Jogo Aberto','Os dois lados disputam o centro. Desenvolva rápido e roque.'],
+ 'e4 e5 Nf3 Nc6 Bc4':['Abertura Italiana','O bispo mira em f7. Plano: c3, d3, roque e depois d4.'],
+ 'e4 e5 Nf3 Nc6 Bb5':['Ruy López (Espanhola)','Pressão sobre o cavalo que defende e5. Jogo lento e estratégico.'],
+ 'e4 e5 Nf3 Nc6 d4':['Abertura Escocesa','As brancas abrem o centro cedo. Jogo aberto, peças ativas.'],
+ 'e4 e5 Nf3 Nf6':['Defesa Petrov','As pretas contra-atacam e4 em vez de defender e5.'],
+ 'e4 e5 Nf3 d6':['Defesa Philidor','Sólida, mas passiva: o bispo de f8 fica preso.'],
+ 'e4 e5 Bc4':['Abertura do Bispo','Mira em f7 desde cedo. Cuidado com o mate do pastor.'],
+ 'e4 e5 Nc3':['Abertura Vienense','Prepara f4 mantendo o centro protegido.'],
+ 'e4 e5 f4':['Gambito do Rei','As brancas oferecem um peão por ataque rápido. Jogo tático.'],
+ 'e4 c5':['Defesa Siciliana','As pretas lutam pelo centro pelo lado. Posições desequilibradas.'],
+ 'e4 e6':['Defesa Francesa','Centro fechado depois de d4 d5. As pretas atacam a base com ...c5.'],
+ 'e4 c6':['Defesa Caro-Kann','Apoia ...d5 sem prender o bispo de c8. Muito sólida.'],
+ 'e4 d5':['Defesa Escandinava','Confronto imediato no centro. A dama preta sai cedo: ganhe tempo atacando-a.'],
+ 'e4 Nf6':['Defesa Alekhine','As pretas provocam o avanço dos peões para atacá-los depois.'],
+ 'e4 d6':['Defesa Pirc','As pretas deixam o centro e contra-atacam com o bispo em g7.'],
+ 'd4 d5':['Jogo Fechado','Centro mais travado. As rupturas de peão (c4, e4) decidem o plano.'],
+ 'd4 d5 c4':['Gambito da Dama','O peão de c4 pressiona d5. Não é um gambito de verdade: o peão volta.'],
+ 'd4 d5 c4 e6':['Gambito da Dama Recusado','As pretas sustentam d5. Estrutura sólida; o bispo de c8 sai depois.'],
+ 'd4 d5 c4 dxc4':['Gambito da Dama Aceito','As pretas pegam o peão, mas as brancas ganham o centro com e4 ou e3.'],
+ 'd4 d5 c4 c6':['Defesa Eslava','Sustenta d5 deixando o bispo de c8 livre.'],
+ 'd4 d5 Bf4':['Sistema Londres','Esquema fixo: Bf4, e3, c3, Cf3. Simples e sólido.'],
+ 'd4 Nf6 c4 g6':['Índia do Rei','As pretas cedem o centro e atacam depois com ...e5 ou ...c5.'],
+ 'd4 Nf6 c4 e6':['Defesas Índias','Jogo flexível: as pretas controlam e4 com peças antes de avançar peões.'],
+ 'd4 f5':['Defesa Holandesa','As pretas disputam e4 com o peão f. Rei um pouco exposto.'],
+ 'c4':['Abertura Inglesa','Controle de d5 pelo lado. Jogo posicional.'],
+ 'Nf3':['Abertura Réti','Desenvolve antes de definir os peões centrais.']
+};
+const LEVELS=[{n:'Iniciante',sd:1,pv:8,sms:400,d:1,ms:800,exact:true,band:230},{n:'Casual',sd:3,pv:5,sms:600,d:2,ms:1500,exact:true,band:100},{n:'Clube',sd:7,pv:3,sms:1200,d:3,ms:3000,exact:true,band:30},{n:'Forte',sd:13,pv:1,sms:2500,d:4,ms:3500,exact:false,band:0}];
+const COACHES=[
+ {n:'O Clássico',s:'Morphy',p:'Você valoriza desenvolver todas as peças rápido, rocar cedo, abrir linhas e punir quem perde tempo na abertura. Seu tom é elegante e didático.'},
+ {n:'O Técnico',s:'Capablanca',p:'Você valoriza simplicidade, desenvolvimento limpo, trocar peças quando se está em vantagem e técnica de finais. Seu tom é calmo e econômico.'},
+ {n:'O Atacante',s:'Kasparov',p:'Você valoriza iniciativa, peças ativas, criar ameaças a cada lance e atacar o rei antes que ele se organize. Seu tom é exigente e direto.'},
+ {n:'O Estrangulador',s:'Carlsen',p:'Você valoriza paciência, melhorar a pior peça, pressionar posições iguais até o adversário errar e jogar finais até o fim. Seu tom é prático e tranquilo.'}];
+const CLS=['Excelente','Bom','Imprecisão','Erro','Erro grave'];
+const GLYPH={k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+const PT={k:'R',q:'D',r:'T',b:'B',n:'C'};
+const P={p:'peão',n:'cavalo',b:'bispo',r:'torre',q:'dama',k:'rei'},FEM={r:1,q:1},V={p:1,n:3,b:3,r:5,q:9,k:99};
+const F='abcdefgh';
+const $=id=>document.getElementById(id);
+const art=t=>FEM[t]?'a':'o',seu=t=>FEM[t]?'sua':'seu',ado=t=>FEM[t]?'atacada':'atacado';
+const opp=c=>c==='w'?'b':'w';
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+const join=a=>a.length<2?a.join(''):a.slice(0,-1).join(', ')+' e '+a[a.length-1];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const sanPT=s=>s.replace(/^[KQRBN]/,c=>PT[c.toLowerCase()]).replace(/=([QRBN])/,(_,c)=>'='+PT[c.toLowerCase()]);
+
+let store={pz:{},pzTheme:'all',level:1,color:'w',aid:true,coach:0,stats:{w:0,l:0,d:0},errs:[],done:{},wk:0,save:null};
+try{Object.assign(store,JSON.parse(localStorage.getItem('escola-xadrez')||'{}'))}catch(e){}
+const save=()=>{try{localStorage.setItem('escola-xadrez',JSON.stringify(store))}catch(e){}};
+
+/* ---------- motor (worker, com alternativa na própria página) ---------- */
+let worker=null,reqId=0;const pending={};
+function failWorker(){worker=null;for(const id in pending){const j=pending[id];delete pending[id];j.res(rankMoves(j.fen,Math.min(j.depth,3),Math.min(j.ms,1200),j.exact))}}
+const SA=!!document.getElementById('sfsrc');
+try{if(SA)throw 0;worker=new Worker('engine.js');
+ worker.onmessage=e=>{const j=pending[e.data.id];delete pending[e.data.id];if(j)j.res(e.data.list)};
+ worker.onerror=failWorker}catch(e){worker=null}
+function ownAnalyze(fen,depth,ms,exact){return new Promise(res=>{
+ if(worker){const id=++reqId;pending[id]={res,fen,depth,ms,exact};worker.postMessage({id,fen,depth,ms,exact})}
+ else setTimeout(()=>res(rankMoves(fen,Math.min(depth,3),Math.min(ms,1200),exact)),30)})}
+
+/* Stockfish em worker; se não carregar, o motor próprio assume */
+let sf=null,sfQ=Promise.resolve(),sfCb=null;
+const sfReady=new Promise(res=>{try{const w=new Worker(SA?URL.createObjectURL(new Blob([document.getElementById('sfsrc').textContent],{type:'text/javascript'})):'stockfish.js');let ok=false;
+ const t=setTimeout(()=>{if(!ok){try{w.terminate()}catch(e){}res(false)}},9000);
+ w.onmessage=e=>{const l=typeof e.data==='string'?e.data:'';if(!ok){if(l.includes('uciok')){ok=true;clearTimeout(t);sf=w;res(true)}return}if(sfCb)sfCb(l)};
+ w.onerror=()=>{if(!ok){clearTimeout(t);res(false)}};w.postMessage('uci')}catch(e){res(false)}});
+function sfRun(fen,depth,pv,ms,moves){return new Promise(res=>{const lines={};
+ sfCb=l=>{if(l.startsWith('info')&&l.includes(' pv ')&&!l.includes('bound')){const k=l.match(/multipv (\d+)/),sc=l.match(/score (cp|mate) (-?\d+)/),p=l.match(/ pv (\S+)/);
+   if(sc&&p){const n=+sc[2];lines[k?+k[1]:1]={from:p[1].slice(0,2),to:p[1].slice(2,4),promo:p[1][4]||null,score:sc[1]==='cp'?n:(n>0?100000-n:-100000-n)}}}
+  else if(l.startsWith('bestmove')){sfCb=null;res(Object.keys(lines).sort((a,b)=>a-b).map(k=>lines[k]))}};
+ sf.postMessage('setoption name MultiPV value '+pv);sf.postMessage('position fen '+fen);
+ sf.postMessage('go depth '+depth+' movetime '+ms+(moves?' searchmoves '+moves.join(' '):''))})}
+function sfJob(fen,depth,pv,ms,moves){const j=sfQ.then(()=>sfRun(fen,depth,pv,ms,moves));sfQ=j.catch(()=>{});return j}
+async function analyze(fen,o){if(await sfReady&&sf){const r=await sfJob(fen,o.sd,o.pv,o.sms);if(r.length)return r}
+ return ownAnalyze(fen,o.d,o.ms,o.exact)}
+async function ensureScored(fen,mv,pre){if(!sf||pre.some(x=>x.from===mv.from&&x.to===mv.to))return;
+ const r=await sfJob(fen,10,1,1200,[mv.from+mv.to+(mv.promotion||'')]);if(r[0])pre.push(r[0])}
+const PRE={sd:11,pv:3,sms:1500,d:3,ms:2500,exact:true};
+
+/* ---------- leitura da posição ---------- */
+const xy=sq=>[F.indexOf(sq[0]),+sq[1]];
+function attackers(g,sq,color){const [tx,ty]=xy(sq),out=[];
+ for(let x=0;x<8;x++)for(let y=1;y<=8;y++){const s=F[x]+y,p=g.get(s);if(!p||p.color!==color)continue;
+  const dx=tx-x,dy=ty-y,ax=Math.abs(dx),ay=Math.abs(dy);if(!ax&&!ay)continue;let ok=false;
+  if(p.type==='p')ok=ax===1&&dy===(color==='w'?1:-1);
+  else if(p.type==='n')ok=ax*ay===2;
+  else if(p.type==='k')ok=Math.max(ax,ay)===1;
+  else if((p.type!=='b'&&(!dx||!dy))||(p.type!=='r'&&ax===ay)){const sx=Math.sign(dx),sy=Math.sign(dy);let cx=x+sx,cy=y+sy;ok=true;
+   while(cx!==tx||cy!==ty){if(g.get(F[cx]+cy)){ok=false;break}cx+=sx;cy+=sy}}
+  if(ok)out.push({sq:s,type:p.type})}
+ return out.sort((a,b)=>V[a.type]-V[b.type])}
+function hanging(g,color){const out=[];
+ for(let x=0;x<8;x++)for(let y=1;y<=8;y++){const s=F[x]+y,p=g.get(s);if(!p||p.color!==color||p.type==='k')continue;
+  const att=attackers(g,s,opp(color));if(!att.length)continue;const def=attackers(g,s,color);
+  if(!def.length||V[att[0].type]<V[p.type])out.push({sq:s,type:p.type,by:att[0],free:!def.length})}
+ return out.sort((a,b)=>V[b.type]-V[a.type])}
+function reasons(fen,mv){const b=new Chess(fen),a=new Chess(fen);a.move(mv.san);const me=mv.color,op=opp(me),R=[],mn=+fen.split(' ')[5];
+ if(a.in_checkmate())return['dá xeque-mate'];
+ if(/[kq]/.test(mv.flags))R.push('faz o roque: rei protegido e torre em jogo');
+ if(mv.captured){const defended=attackers(b,mv.to,op).length>0&&!mv.flags.includes('e');
+  let t='captura '+art(mv.captured)+' '+P[mv.captured];
+  if(!defended)t+=' que estava sem defesa';else if(V[mv.captured]>V[mv.piece])t+=' e ganha material na troca';else if(V[mv.captured]===V[mv.piece])t+=' (troca de peças)';
+  R.push(t)}
+ if(mv.promotion)R.push('promove o peão');
+ if(a.in_check())R.push('dá xeque');
+ if(hanging(b,me).some(h=>h.sq===mv.from)&&!hanging(a,me).some(h=>h.sq===mv.to))R.push('tira '+art(mv.piece)+' '+P[mv.piece]+' do ataque');
+ const before=new Set(hanging(b,op).map(h=>h.sq)),nt=hanging(a,op).filter(h=>!before.has(h.sq)&&(h.type!=='p'||h.free));
+ if(nt.length>=2)R.push('faz um ataque duplo: '+join(nt.slice(0,2).map(h=>P[h.type]+' de '+h.sq)));
+ else if(nt.length)R.push('ataca '+art(nt[0].type)+' '+P[nt[0].type]+' de '+nt[0].sq);
+ if(mn<=12&&(mv.piece==='n'||mv.piece==='b')&&mv.from[1]===(me==='w'?'1':'8'))R.push('desenvolve o '+P[mv.piece]);
+ if(mv.piece==='p'&&mn<=10&&['e4','d4','e5','d5'].includes(mv.to))R.push('ocupa o centro');
+ if(mv.piece==='r'&&mv.from[0]!==mv.to[0]){let open=true;for(let y=1;y<=8;y++){const p=a.get(mv.to[0]+y);if(p&&p.type==='p')open=false}if(open)R.push('coloca a torre em coluna aberta')}
+ if(mv.piece==='p'&&!mv.captured&&(me==='w'?+mv.to[1]>=6:+mv.to[1]<=3))R.push('avança o peão rumo à promoção');
+ if(!R.length)R.push({p:'ganha espaço com o peão',n:'reposiciona o cavalo',b:'reposiciona o bispo',r:'ativa a torre',q:'reposiciona a dama',k:'aproxima o rei'}[mv.piece]);
+ return R}
+function mateThreat(g){if(g.in_check())return null;const p=g.fen().split(' ');p[1]=opp(p[1]);p[3]='-';const t=new Chess();if(!t.load(p.join(' ')))return null;const s=t.moves().find(x=>x.includes('#'));return s?sanPT(s):null}
+const clamp=s=>Math.max(-1500,Math.min(1500,s));
+function bestMove(fen,pre){const b=new Chess(fen);return b.move({from:pre[0].from,to:pre[0].to,promotion:pre[0].promo||'q'})}
+function grade(fen,mv,pre,hist){const me=mv.color,b=new Chess(fen),a=new Chess(fen);a.move(mv.san);
+ const best=pre[0],pl=pre.find(x=>x.from===mv.from&&x.to===mv.to)||best,loss=clamp(best.score)-clamp(pl.score),isBest=pl===best||loss<=0;
+ let cls=isBest||loss<=25?0:loss<=80?1:loss<=160?2:loss<=320?3:4,problem='';
+ const bm=bestMove(fen,pre);
+ if(best.score>90000&&pl.score<90000){cls=Math.max(cls,3);problem='Havia xeque-mate forçado.'}
+ const mates=a.moves().filter(s=>s.includes('#'));
+ if(mates.length){cls=4;problem='Esse lance permite xeque-mate: '+sanPT(mates[0])+'.'}
+ if(cls>=2&&!problem){const hb=new Set(hanging(b,me).map(h=>h.sq)),all=hanging(a,me),nw=all.find(h=>(h.sq===mv.to||!hb.has(h.sq))&&(V[h.type]>=3||h.free));
+  if(nw)problem=`Você deixou ${seu(nw.type)} ${P[nw.type]} em ${nw.sq} ${nw.free?'sem defesa':ado(nw.type)+' por peça de menor valor'}: ${art(nw.by.type)} ${P[nw.by.type]} de ${nw.by.sq} pode capturar.`;
+  else if(all.length&&V[all[0].type]>=3)problem=`${cap(seu(all[0].type))} ${P[all[0].type]} em ${all[0].sq} continuou ${ado(all[0].type)}. Era preciso resolver isso primeiro.`;
+  else if(bm.captured&&!mv.captured)problem='Havia material para ganhar.';
+  else problem=cls===2?'Havia um lance mais útil.':'O lance cede vantagem.'}
+ let tip='';
+ if(cls<=2&&hist&&S.startFen===START&&+fen.split(' ')[5]<=10){
+  const minors=n=>{let c=0;for(let x=0;x<8;x++)for(let y=1;y<=8;y++){const p=n.get(F[x]+y);if(p&&p.color===me&&(p.type==='n'||p.type==='b')&&y!==(me==='w'?1:8))c++}return c};
+  const prev=hist[hist.length-3];
+  if(mv.piece==='q'&&minors(a)<2)tip=' Princípio: dama cedo vira alvo. Desenvolva cavalos e bispos antes.';
+  else if(prev&&prev.to===mv.from&&mv.piece!=='p'&&!mv.captured&&!hanging(b,me).some(h=>h.sq===mv.from))tip=' Princípio: mover a mesma peça duas vezes na abertura custa tempo.';
+  else if(mv.piece==='p'&&mv.from[0]==='f'&&!mv.captured)tip=' Cuidado: mover o peão f abre a diagonal do seu rei.'}
+ return{cls,loss,isBest,problem,tip,desc:cap(join(reasons(fen,mv)))+'.',bestSan:sanPT(bm.san),bestWhy:join(reasons(fen,bm))}}
+
+/* ---------- estado ---------- */
+const S={mode:'play',game:new Chess(),startFen:START,color:'w',level:1,notes:[],view:null,viewG:null,pre:null,prePromise:null,thinking:false,over:false,overText:'',counted:false,
+ hintStage:0,hintSq:[],sel:null,targets:[],last:[],drill:null,fix:null,sc:null};
+let epoch=0,tab='play',wk=Math.min(store.wk||0,WEEKS.length-1);
+
+function say(label,html){$('coachLabel').textContent=label;$('coachBody').innerHTML=html;if(!aiBusy)$('aiBox').hidden=true}
+function moveLabel(i){const st=S.startFen.split(' '),sb=st[1]==='b',ply=i+(sb?1:0),no=+st[5]+(ply>>1);return no+(ply%2?'...':'.')+' '+sanPT(S.notes[i].raw)}
+function noteHtml(i){const n=S.notes[i];return n.by==='you'
+ ?`<p><span class="tag c${n.cls}">${n.label}</span><b>${moveLabel(i)}</b> ${n.text}</p>`
+ :`<p><span class="tag cpu">Máquina</span><b>${moveLabel(i)}</b> ${n.text}</p>`}
+function showLive(){const n=S.notes.length;let h='';for(let i=Math.max(0,n-2);i<n;i++)h+=noteHtml(i);
+ if(S.over)h+=`<p><b>${S.overText}</b></p>`;
+ say(S.over?'Fim de jogo':S.drill?'Treino · '+S.drill.t:'Treinador',h||intro())}
+function intro(){return S.drill?`<p>${S.drill.g}</p>`:`<p>Você joga de ${S.color==='w'?'brancas':'pretas'} contra o nível ${LEVELS[S.level].n}. Antes de cada lance, duas perguntas: o que ele ameaça? O que está sem defesa?</p>`}
+
+function requestPre(){if(S.over)return;const ep=epoch;S.pre=null;
+ S.prePromise=analyze(S.game.fen(),PRE).then(l=>{if(ep!==epoch)return null;S.pre=l;updateEval();return l})}
+function updateEval(){if(!S.pre||S.mode!=='play')return;const s=S.pre[0].score,w=S.game.turn()==='w'?s:-s,a=Math.abs(w);
+ $('evalFill').style.width=(50+50*Math.tanh(w/600))+'%';
+ $('evalTxt').textContent=a>90000?'Mate para as '+(w>0?'brancas':'pretas'):a<30?'Equilíbrio':(w>0?'Brancas':'Pretas')+' +'+(a/100).toFixed(1)}
+
+function persist(){if(S.mode!=='play')return;store.save={fen:S.startFen,color:S.color,level:S.level,notes:S.notes,drill:S.drill,counted:S.counted};save()}
+function resetBoardState(){S.view=null;S.over=false;S.overText='';S.thinking=false;S.last=[];S.sel=null;S.targets=[];S.hintStage=0;S.hintSq=[];S.pre=null}
+function newGame(o={}){epoch++;resetBoardState();S.mode='play';S.drill=o.drill||null;S.startFen=o.fen||START;S.game=new Chess(S.startFen);
+ S.color=o.color||store.color;S.level=o.level!=null?o.level:store.level;S.notes=[];S.counted=false;S.fix=null;
+ $('evalFill').style.width='50%';$('evalTxt').textContent='Equilíbrio';
+ showLive();persist();renderPlay();if(S.game.turn()!==S.color)engineTurn(epoch);else requestPre();draw()}
+function restore(){const v=store.save;if(!v)return newGame();epoch++;resetBoardState();S.mode='play';S.drill=v.drill||null;S.startFen=v.fen;S.color=v.color;S.level=v.level;S.counted=!!v.counted;S.fix=null;
+ S.game=new Chess(v.fen);S.notes=[];for(const n of v.notes||[]){if(!S.game.move(n.raw))break;S.notes.push(n)}
+ const h=S.game.history({verbose:true});if(h.length)S.last=[h[h.length-1].from,h[h.length-1].to];
+ renderPlay();if(!checkOver()){if(S.game.turn()!==S.color)engineTurn(epoch);else requestPre()}showLive();draw()}
+
+async function userMove(from,to){const ep=epoch,fen=S.game.fen(),mv=S.game.move({from,to,promotion:'q'});if(!mv)return;
+ S.sel=null;S.targets=[];S.last=[from,to];S.hintStage=0;S.hintSq=[];S.thinking=true;draw();
+ const pre=S.pre||await S.prePromise;if(ep!==epoch||!pre)return;
+ await ensureScored(fen,mv,pre);if(ep!==epoch)return;
+ const g=grade(fen,mv,pre,S.game.history({verbose:true}));let text;
+ if(g.cls<=1)text=g.desc+(!g.isBest&&g.cls===1?` Um pouco melhor: <b>${g.bestSan}</b> (${g.bestWhy}).`:'')+g.tip;
+ else text=`${g.problem} Melhor era <b>${g.bestSan}</b>: ${g.bestWhy}.`+g.tip+(g.cls>=3?' Use "Voltar lance" para tentar de novo.':'');
+ S.notes.push({raw:mv.san,by:'you',cls:g.cls,label:g.isBest?'Melhor lance':CLS[g.cls],text});
+ if(g.cls>=3&&!store.errs.some(e=>e.fen===fen)){store.errs.unshift({id:Date.now(),fen,played:sanPT(mv.san),solved:false});store.errs=store.errs.slice(0,40)}
+ showLive();renderPlay();persist();if(checkOver()){draw();return}
+ engineTurn(ep)}
+async function engineTurn(ep){S.thinking=true;draw();const L=LEVELS[S.level],fen=S.game.fen(),t0=Date.now();
+ const list=await analyze(fen,L);if(ep!==epoch)return;
+ const w=450-(Date.now()-t0);if(w>0){await sleep(w);if(ep!==epoch)return}
+ const best=list[0].score,c=list.filter(x=>best-x.score<=L.band),pick=c[Math.random()*c.length|0];
+ const em=S.game.move({from:pick.from,to:pick.to,promotion:pick.promo||'q'});S.last=[em.from,em.to];
+ S.notes.push({raw:em.san,by:'cpu',cls:null,text:engineText(fen,em)});S.thinking=false;
+ const over=checkOver();showLive();renderPlay();persist();if(!over)requestPre();draw()}
+function engineText(fen,em){const g=S.game;let t=cap(join(reasons(fen,em)))+'.';if(g.game_over())return t;
+ if(g.in_check())t+=' Você está em xeque.';
+ const h=hanging(g,S.color),mt=mateThreat(g);
+ if(mt)t+=` <b>Atenção:</b> ele ameaça xeque-mate com ${mt}.`;
+ if(h.length)t+=' <b>Atenção:</b> '+h.slice(0,2).map(x=>`${seu(x.type)} ${P[x.type]} em ${x.sq} está ${ado(x.type)} ${x.free?'e sem defesa':'por peça de menor valor'} (${P[x.by.type]} de ${x.by.sq})`).join('; ')+'.';
+ else if(!mt&&!g.in_check())t+=' Nenhuma ameaça direta.';
+ return t}
+function checkOver(){const g=S.game;if(!g.game_over())return false;S.over=true;S.thinking=false;let r;
+ if(g.in_checkmate()){r=g.turn()!==S.color?'w':'l';S.overText=r==='w'?'Xeque-mate. Você venceu.':'Xeque-mate. A máquina venceu.'}
+ else{r='d';S.overText=g.in_stalemate()?'Afogamento: o rei ficou sem lances legais e não está em xeque. Empate.':g.in_threefold_repetition()?'Empate por repetição de posição.':g.insufficient_material()?'Empate por falta de material para dar mate.':'Empate pela regra dos 50 lances.'}
+ if(!S.counted){S.counted=true;if(!S.drill)store.stats[r]++;persist()}
+ return true}
+function undo(){if(S.mode!=='play'||!S.game.history().length)return;epoch++;resetBoardState();
+ S.game.undo();S.notes.pop();if(S.game.turn()!==S.color&&S.game.history().length){S.game.undo();S.notes.pop()}
+ persist();renderPlay();say('Treinador','<p>Lance desfeito. Refaça as duas perguntas e tente outra ideia.</p>');
+ if(S.game.turn()!==S.color)engineTurn(epoch);else requestPre();draw()}
+
+/* ---------- Meus erros ---------- */
+function loadFix(e){epoch++;resetBoardState();S.mode='fix';S.fix=e;S.game=new Chess(e.fen);S.color=S.game.turn();S.startFen=e.fen;S.notes=[];S.drill=null;
+ say('Meus erros',`<p>Nesta posição você jogou <b>${e.played}</b> e cedeu vantagem. Ache um lance melhor.</p>`);requestPre();renderErrs();draw()}
+async function fixMove(from,to){const ep=epoch,fen=S.game.fen(),mv=S.game.move({from,to,promotion:'q'});if(!mv)return;
+ S.sel=null;S.targets=[];S.last=[from,to];S.hintSq=[];S.thinking=true;draw();
+ const pre=S.pre||await S.prePromise;if(ep!==epoch||!pre)return;await ensureScored(fen,mv,pre);if(ep!==epoch)return;S.thinking=false;const g=grade(fen,mv,pre,null);
+ if(g.cls<=1){S.over=true;S.fix.solved=true;save();say('Meus erros',`<p><span class="tag c0">Corrigido</span><b>${sanPT(mv.san)}</b> ${g.desc}</p>`);renderErrs()}
+ else{S.game.undo();S.last=[];say('Meus erros',`<p><span class="tag c3">Ainda não</span><b>${sanPT(mv.san)}</b> ${g.problem} Tente outro lance ou peça uma dica.</p>`)}
+ draw()}
+
+/* ---------- Aulas ---------- */
+const ex=()=>S.sc.e;
+function startEx(e,meta){epoch++;resetBoardState();S.mode='script';S.sc=Object.assign({e,step:0,sans:[],note:'',miss:false,hs:0,m1:null,pz:null},meta);S.game=new Chess(e.fen);S.color=e.side;S.startFen=e.fen;S.notes=[];S.drill=null;S.fix=null;
+ if(S.sc.pz!=null)renderPuzzles();else renderLessons();if(S.game.turn()!==e.side)scriptOpp(S.sc.pz!=null?650:0);else scriptSay();draw()}
+function loadEx(i){startEx(WEEKS[wk].ex[i],{i})}
+/* ---------- Puzzles ---------- */
+const PZ=typeof PUZZLES!=='undefined'?PUZZLES:[];
+const THEMES={all:'Misto',mate1:'Mate em 1',mate2:'Mate em 2',solta:'Peça solta',garfo:'Garfo',cravada:'Cravada e espeto',descoberto:'Ataque descoberto',captura:'Capturas que ganham',combinacao:'Combinações'};
+const PZHINT={mate1:'Olhe todos os xeques.',mate2:'Olhe todos os xeques. O primeiro lance força a resposta.',solta:'Há uma peça dele sem defesa.',garfo:'Procure um lance que ataque duas coisas ao mesmo tempo.',cravada:'Há peças dele alinhadas na mesma linha.',descoberto:'Uma peça sua está na frente de outra. Tire-a com ameaça.',captura:'Conte atacantes e defensores de cada peça.',combinacao:'Procure lances forçantes: xeques, capturas e ameaças.'};
+const today=()=>Math.floor(Date.now()/864e5);
+const pzPool=()=>PZ.map((p,i)=>i).filter(i=>store.pzTheme==='all'||PZ[i].t===store.pzTheme);
+function nextPuzzle(){const pool=pzPool(),d=today();if(!pool.length){say('Puzzles','<p>Os puzzles não carregaram. Recarregue a página.</p>');return}
+ let i=pool.find(k=>store.pz[k]&&store.pz[k][1]<=d);if(i==null)i=pool.find(k=>!store.pz[k]);
+ if(i==null)i=pool.slice().sort((a,b)=>store.pz[a][1]-store.pz[b][1])[0];
+ const p=PZ[i],mate=p.t[0]==='m',side=p.s==='w'?'Brancas':'Pretas';
+ startEx({title:store.pzTheme==='all'?'':THEMES[p.t],fen:p.f,side:p.s,seq:p.m.split(' '),alt:p.a,mate,hint:PZHINT[p.t],
+  goal:side+' jogam e '+(p.t==='mate1'?'dão mate em 1.':p.t==='mate2'?'dão mate em 2.':'ganham material.')},{pz:i})}
+function pzDone(){const c=S.sc,r=store.pz[c.pz]||[0,0],d=today();
+ if(c.miss)store.pz[c.pz]=[0,d+1];else{const n=r[0]+1;store.pz[c.pz]=[n,d+[3,10,30,90][Math.min(n-1,3)]]}
+ save();renderPuzzles()}
+function renderPuzzles(){const d=today(),seen=Object.keys(store.pz).length,due=Object.keys(store.pz).filter(k=>store.pz[k][1]<=d).length,ok=Object.keys(store.pz).filter(k=>store.pz[k][0]>0).length;
+ $('pzStats').textContent=`${PZ.length} puzzles. Você já viu ${seen}, acertou de primeira ${ok}. Para revisar hoje: ${due}.`;
+ $('pzThemes').innerHTML=Object.keys(THEMES).map(t=>{const n=t==='all'?PZ.length:PZ.filter(p=>p.t===t).length;return n?`<button data-t="${t}" aria-current="${store.pzTheme===t}">${THEMES[t]} · ${n}</button>`:''}).join('')}
+function scriptOpp(delay){const ep=epoch;S.thinking=true;draw();setTimeout(()=>{if(ep!==epoch)return;const u=ex().seq[S.sc.step],mv=S.game.move({from:u.slice(0,2),to:u.slice(2,4),promotion:'q'});
+ S.sc.sans.push(mv.san);S.last=[mv.from,mv.to];S.sc.step++;S.thinking=false;scriptSay();draw()},delay)}
+function scriptSay(){const e=ex(),c=S.sc;let why=e.why;
+ if(c.pz!=null&&S.over){const r=store.pz[c.pz];why=`<b>${sanPT(c.m1.mv.san)}</b>: ${join(reasons(c.m1.fen,c.m1.mv))}. `+(c.miss?'Como houve erro, ele volta amanhã.':`Volta para revisão em ${r[1]-today()} dias.`)}
+ let h=S.over?`<p><span class="tag c0">Correto</span>${why}</p>`:`<p><b>${(e.prompts&&e.prompts[c.step])||e.goal}</b></p>`+c.note;
+ if(c.sans.length){const sb=e.fen.split(' ')[1]==='b';let t='';c.sans.forEach((s,i)=>{const ply=i+(sb?1:0);if(ply%2===0)t+=(ply/2+1)+'. ';else if(i===0)t+='1... ';t+=sanPT(s)+' '});h+=`<p class="line">${t.trim()}</p>`}
+ say(c.pz!=null?'Puzzle'+(e.title?' · '+e.title:''):`Aula ${wk+1} · ${e.title}`,h)}
+function scriptMove(from,to){const e=ex(),c=S.sc,u=from+to,want=e.seq[c.step];S.sel=null;S.targets=[];
+ let ok=u===want.slice(0,4)||((e.alt&&e.alt[c.step])||[]).some(a=>a.slice(0,4)===u);
+ if(!ok&&e.mate&&c.step===e.seq.length-1){const t=new Chess(S.game.fen());ok=!!t.move({from,to,promotion:'q'})&&t.in_checkmate()}
+ if(!ok){c.miss=true;c.note='<p><span class="tag c3">Não é esse</span>O que está atacado, e o que está sem defesa?</p>';scriptSay();draw();return}
+ const fenB=S.game.fen(),mv=S.game.move({from,to,promotion:u===want.slice(0,4)&&want[4]?want[4]:'q'});if(!c.m1)c.m1={fen:fenB,mv};
+ c.sans.push(mv.san);S.last=[from,to];c.step++;c.note='';S.hintSq=[];
+ if(c.step>=e.seq.length){S.over=true;if(c.pz!=null)pzDone();else{store.done[e.id]=true;save();renderLessons()}scriptSay();draw()}else scriptOpp(450)}
+
+/* ---------- dica ---------- */
+function hint(){if(S.over||S.thinking||S.view!=null)return;
+ if(S.mode==='script'){const c=S.sc;if(S.game.turn()!==S.color)return;if(c.pz!=null)c.miss=true;
+  if(c.hs++===0)c.note=`<p><span class="tag cpu">Dica</span>${ex().hint}</p>`;else{S.hintSq=[ex().seq[c.step].slice(0,2)];c.note=`<p><span class="tag cpu">Dica</span>${ex().hint} A peça está destacada em azul.</p>`}
+  scriptSay();draw();return}
+ if(S.game.turn()!==S.color)return;
+ if(!S.pre){const ep=epoch;say('Dica','<p>Calculando a posição…</p>');S.prePromise.then(()=>{if(ep===epoch&&S.pre)hint()});return}
+ const fen=S.game.fen(),bm=bestMove(fen,S.pre),rs=reasons(fen,bm),j=rs.join(' ');
+ if(S.hintStage===0){S.hintStage=1;S.hintSq=[bm.from];
+  const idea=/mate/.test(j)?'Existe um xeque-mate. Olhe todos os xeques.':bm.captured?'Dá para ganhar ou trocar material. Olhe as capturas.':/xeque/.test(j)?'Há um xeque útil.':/do ataque/.test(j)?'Uma peça sua está atacada. Salve-a.':/roque/.test(j)?'Seu rei ainda está no centro.':/desenvolve/.test(j)?'Ainda há peça sua na casa inicial.':/ataca|duplo/.test(j)?'Dá para criar uma ameaça.':'Melhore a posição da peça destacada.';
+  say('Dica',`<p>${idea} A peça está destacada em azul. Toque em Dica de novo para ver o lance.</p>`)}
+ else{S.hintStage=2;S.hintSq=[bm.from,bm.to];say('Dica',`<p><b>${sanPT(bm.san)}</b>: ${join(rs)}.</p>`)}
+ draw()}
+
+/* ---------- treinador com Claude ---------- */
+let sample=null,aiBusy=false,aiCtl=null;
+const strip=h=>h.replace(/<[^>]+>/g,'');
+function coachRules(){const c=COACHES[store.coach];return `Você é "${c.n}", um treinador de xadrez fictício cujo método se inspira na escola de jogo de ${c.s}. Você não é essa pessoa: nunca fale como se fosse ela e nunca invente citações dela. ${c.p}
+Seu aluno é um adulto iniciante que voltou a jogar. Responda em português do Brasil, em texto corrido, sem markdown e sem listas. Use notação em português (R, D, T, B, C). Toda afirmação concreta sobre lances deve se apoiar na análise do motor fornecida; não invente variantes que não estejam nela. Se a pergunta não for sobre xadrez, diga que só trata de xadrez.`}
+function posContext(){const g=S.game,fen=g.fen(),me=S.color;let t=`Posição (FEN): ${fen}\nO aluno joga de ${me==='w'?'brancas':'pretas'}. É a vez das ${g.turn()==='w'?'brancas':'pretas'}.`;
+ if(S.notes.length)t+='\nLances até aqui: '+S.notes.map((n,i)=>moveLabel(i)).join(' ');
+ if(S.pre&&!S.over&&g.turn()===me){t+='\nAnálise do motor (melhores lances para o aluno, avaliação em peões do ponto de vista dele): '+S.pre.slice(0,3).map(x=>{const b=new Chess(fen),m=b.move({from:x.from,to:x.to,promotion:x.promo||'q'});return m?sanPT(m.san)+' ('+(Math.abs(x.score)>90000?(x.score>0?'mate a favor':'mate contra'):(x.score/100).toFixed(1))+')':''}).filter(Boolean).join(', ')}
+ const hm=hanging(g,me),ho=hanging(g,opp(me));
+ if(hm.length)t+='\nPeças do aluno em perigo: '+hm.map(h=>P[h.type]+' em '+h.sq).join(', ');
+ if(ho.length)t+='\nPeças do adversário atacadas e mal defendidas: '+ho.map(h=>P[h.type]+' em '+h.sq).join(', ');
+ const n=S.notes.length;if(n)t+='\nComentários automáticos dos últimos lances: '+S.notes.slice(-2).map((x,i)=>moveLabel(n-Math.min(2,n)+i)+': '+strip(x.text)).join(' | ');
+ if(S.over)t+='\nA partida terminou: '+S.overText;
+ return t}
+function aiErr(code){return code==='rate_limited'?'Limite de uso atingido. Tente de novo mais tarde.':code==='session_expired'?'Sua sessão expirou. Entre de novo no Claude.':code==='refused'?'O treinador não pôde responder a essa pergunta.':'Não foi possível falar com o treinador agora. Tente de novo.'}
+async function askCoach(prompt,tier){if(!sample||aiBusy)return;aiBusy=true;aiCtl=new AbortController();
+ $('aiBox').hidden=false;$('aiName').textContent=COACHES[store.coach].n;$('aiOut').textContent='Pensando…';$('btnAsk').disabled=true;$('btnStop').hidden=false;
+ try{const r=await sample(prompt,{modelTier:tier,cache:false,signal:aiCtl.signal,onText:({text})=>{$('aiOut').textContent=text}});
+  if(r.truncated)$('aiOut').textContent+=' (resposta cortada)'}
+ catch(e){if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(e&&e.code)){sample=null;$('ask').hidden=true;$('aiBox').hidden=true;renderPlay()}
+  else if(e&&e.code==='cancelled')$('aiOut').textContent=e.text||'Interrompido.';
+  else $('aiOut').textContent=(e&&e.text?e.text+' ':'')+aiErr(e&&e.code)}
+ finally{aiBusy=false;$('btnAsk').disabled=false;$('btnStop').hidden=true}}
+function renderCoach(){const c=COACHES[store.coach];$('coachInfo').textContent=`${c.n}: treinador fictício, inspirado na escola de jogo de ${c.s}.`+(sample?' Ele responde às suas perguntas abaixo do tabuleiro.':'')}
+
+/* ---------- desenho ---------- */
+function draw(){const g=S.view!=null?S.viewG:S.game,o=S.color,hm=new Set,ho=new Set,live=S.view==null;
+ if(live&&!S.over&&!S.thinking&&store.aid&&S.mode!=='script'&&g.turn()===S.color){hanging(g,S.color).forEach(h=>hm.add(h.sq));hanging(g,opp(S.color)).forEach(h=>ho.add(h.sq))}
+ const chk=g.in_check()?g.turn():null;let h='';
+ for(let r=0;r<8;r++)for(let f=0;f<8;f++){const file=o==='w'?F[f]:F[7-f],rank=o==='w'?8-r:r+1,sq=file+rank,p=g.get(sq),dark=(F.indexOf(file)+rank)%2===1;
+  let c='sq '+(dark?'d':'l');
+  if(live){if(S.last.includes(sq))c+=' last';if(S.hintSq.includes(sq))c+=' hint';if(S.sel===sq)c+=' sel';if(S.targets.includes(sq))c+=' tg'+(p?' cap':'');if(hm.has(sq))c+=' hm';else if(ho.has(sq))c+=' ho'}
+  if(p&&p.type==='k'&&p.color===chk)c+=' chk';
+  h+=`<button class="${c}" data-sq="${sq}" aria-label="${sq}${p?' '+P[p.type]+' '+(p.color==='w'?'branco':'preto'):''}">`+(p?`<span class="pc ${p.color}">${GLYPH[p.type]}︎</span>`:'')+
+   (r===7?`<span class="co f">${file}</span>`:'')+(f===0?`<span class="co r">${rank}</span>`:'')+'</button>'}
+ $('board').innerHTML=h;
+ $('evalrow').hidden=S.mode!=='play';$('btnUndo').hidden=S.mode!=='play';$('btnLive').hidden=S.view==null;
+ $('btnNext').hidden=S.mode!=='script';$('btnReset').hidden=S.mode==='play';
+ $('btnHint').disabled=S.over||S.thinking||S.view!=null;$('btnUndo').disabled=!S.game.history().length;
+ if(S.mode==='script'){const lastEx=S.sc.i===WEEKS[wk].ex.length-1;$('btnNext').textContent=S.sc.pz!=null?'Próximo puzzle':lastEx?'Próxima aula':'Próximo exercício'}}
+function renderPlay(){const n=S.notes,st=S.startFen.split(' '),sb=st[1]==='b';let h='';
+ n.forEach((x,i)=>{const ply=i+(sb?1:0),no=+st[5]+(ply>>1);if(ply%2===0)h+=`<span class="no">${no}.</span>`;else if(i===0)h+=`<span class="no">${no}...</span>`;
+  h+=`<button class="${x.by==='you'&&x.cls>=2?'c'+x.cls:''}" data-i="${i}" aria-current="${S.view===i}" title="${x.by==='you'?x.label:'Máquina'}">${sanPT(x.raw)}</button>`});
+ $('moves').innerHTML=h||'<span class="muted">Nenhum lance ainda.</span>';
+ $('gameLab').textContent=S.drill?'Treino: '+S.drill.t:'Partida contra '+LEVELS[S.level].n;
+ let op='';if(S.startFen===START&&n.length){const seq=n.map(x=>x.raw.replace(/[+#]/g,'')).join(' ');let bk='';for(const k in OPEN)if((seq===k||seq.startsWith(k+' '))&&k.length>bk.length)bk=k;if(bk)op=`<b>${OPEN[bk][0]}.</b> ${OPEN[bk][1]}`}
+ $('opening').innerHTML=op;$('opening').hidden=!op;
+ const sm=$('summary');sm.hidden=!S.over;
+ if(S.over){const c=[0,0,0,0,0];n.forEach(x=>{if(x.by==='you')c[x.cls]++});
+  sm.innerHTML=`<span class="lab">Resumo dos seus lances</span><p>${c.map((v,i)=>`<span class="tag c${i}">${CLS[i]} ${v}</span>`).join(' ')}</p>`+
+   (c[3]+c[4]?'<p class="muted">Os erros foram salvos em "Meus erros". Corrija cada um antes da próxima partida.</p>':'<p class="muted">Nenhum erro sério nesta partida.</p>')+(sample?'<div><button class="btn" data-review="1">Pedir análise da partida ao treinador</button></div>':'')}
+ const s=store.stats;$('stats').textContent=`Suas partidas: ${s.w} vitórias, ${s.d} empates, ${s.l} derrotas.`}
+function renderDrills(){$('drills').innerHTML=DRILLS.map((d,i)=>`<button class="card" data-d="${i}"><b>${d.t}</b><span>${d.g}</span></button>`).join('')}
+function renderErrs(){$('errs').innerHTML=store.errs.length?store.errs.map(e=>`<button class="card${e.solved?' done':''}" data-id="${e.id}" aria-current="${S.fix===e}"><b>Você jogou ${e.played}</b><span>${e.solved?'Corrigido. Toque para refazer.':'Toque para achar um lance melhor.'}</span></button>`).join('')
+ :'<p class="muted">Nenhum erro salvo ainda. Quando você errar numa partida, a posição aparece aqui para você corrigir.</p>'}
+function renderLessons(){const w=WEEKS[wk];
+ $('wkSel').innerHTML=WEEKS.map((x,i)=>`<button data-w="${i}" aria-current="${i===wk}" class="${x.ex.every(e=>store.done[e.id])?'done':''}">${i+1}. ${x.t}</button>`).join('');
+ $('lessonHead').innerHTML=`<h2>${w.t}</h2><p class="muted">${w.sub}</p>`;$('lessonText').innerHTML=w.lesson;
+ $('exlist').innerHTML=w.ex.map((e,i)=>`<button data-e="${i}" aria-current="${S.mode==='script'&&S.sc.pz==null&&S.sc.i===i}" class="${store.done[e.id]?'done':''}">${e.title}</button>`).join('')}
+function setTab(t){tab=t;document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
+ ['play','puzzles','drills','errs','lessons'].forEach(x=>$('tab-'+x).hidden=x!==t);
+ if(t==='play'&&S.mode!=='play')restore();
+ if(t==='lessons'&&!(S.mode==='script'&&S.sc.pz==null))loadEx(0);
+ if(t==='puzzles'){renderPuzzles();if(!(S.mode==='script'&&S.sc.pz!=null))nextPuzzle()}
+ if(t==='errs')renderErrs()}
+
+/* ---------- eventos ---------- */
+$('board').addEventListener('click',ev=>{const b=ev.target.closest('[data-sq]');if(!b||S.view!=null||S.thinking||S.over||S.game.turn()!==S.color)return;
+ const sq=b.dataset.sq,p=S.game.get(sq);
+ if(S.sel&&S.targets.includes(sq)){const f=S.sel;return S.mode==='play'?userMove(f,sq):S.mode==='fix'?fixMove(f,sq):scriptMove(f,sq)}
+ if(p&&p.color===S.color){S.sel=sq;S.targets=S.game.moves({square:sq,verbose:true}).map(x=>x.to)}else{S.sel=null;S.targets=[]}
+ draw()});
+$('tabs').addEventListener('click',ev=>{const b=ev.target.closest('[data-tab]');if(b)setTab(b.dataset.tab)});
+$('moves').addEventListener('click',ev=>{const b=ev.target.closest('[data-i]');if(!b)return;const i=+b.dataset.i;
+ if(i===S.notes.length-1){S.view=null;showLive()}else{S.view=i;S.viewG=new Chess(S.startFen);for(let j=0;j<=i;j++)S.viewG.move(S.notes[j].raw);say('Revisão',noteHtml(i))}
+ renderPlay();draw()});
+$('btnLive').onclick=()=>{S.view=null;showLive();renderPlay();draw()};
+$('btnHint').onclick=hint;
+$('btnUndo').onclick=undo;
+$('btnNew').onclick=()=>newGame();
+$('btnReset').onclick=()=>{if(S.mode==='script'){const c=S.sc;startEx(c.e,c.pz!=null?{pz:c.pz,miss:c.miss}:{i:c.i})}else if(S.mode==='fix')loadFix(S.fix)};
+$('btnNext').onclick=()=>{if(S.sc.pz!=null)return nextPuzzle();if(S.sc.i<WEEKS[wk].ex.length-1)return loadEx(S.sc.i+1);wk=(wk+1)%WEEKS.length;store.wk=wk;save();loadEx(0)};
+$('level').onchange=e=>{store.level=+e.target.value;save();if(!S.drill&&S.mode==='play'){S.level=store.level;persist();renderPlay()}};
+$('color').onchange=e=>{store.color=e.target.value;save();newGame()};
+$('aid').onchange=e=>{store.aid=e.target.checked;save();draw()};
+$('drills').addEventListener('click',ev=>{const b=ev.target.closest('[data-d]');if(!b)return;const d=DRILLS[+b.dataset.d];newGame({drill:{t:d.t,g:d.g},fen:d.fen,color:'w',level:2});setTab('play')});
+$('errs').addEventListener('click',ev=>{const b=ev.target.closest('[data-id]');if(!b)return;const e=store.errs.find(x=>x.id==b.dataset.id);if(e)loadFix(e)});
+$('pzThemes').addEventListener('click',ev=>{const b=ev.target.closest('[data-t]');if(!b)return;store.pzTheme=b.dataset.t;save();nextPuzzle()});
+$('wkSel').addEventListener('click',ev=>{const b=ev.target.closest('[data-w]');if(!b)return;wk=+b.dataset.w;store.wk=wk;save();loadEx(0)});
+$('exlist').addEventListener('click',ev=>{const b=ev.target.closest('[data-e]');if(b)loadEx(+b.dataset.e)});
+
+$('coachSel').innerHTML=COACHES.map((c,i)=>`<option value="${i}">${c.n}</option>`).join('');$('coachSel').value=store.coach;
+$('coachSel').onchange=e=>{store.coach=+e.target.value;save();renderCoach()};
+$('ask').addEventListener('submit',ev=>{ev.preventDefault();const q=$('q').value.trim()||'Explique esta posição: o que devo observar e qual é o plano?';$('q').value='';
+ askCoach(coachRules()+'\nResponda em no máximo 110 palavras.\n\n'+posContext()+'\n\nPergunta do aluno: '+q,'quick')});
+$('btnStop').onclick=()=>aiCtl&&aiCtl.abort();
+$('summary').addEventListener('click',ev=>{if(!ev.target.closest('[data-review]'))return;
+ const list=S.notes.map((n,i)=>moveLabel(i)+(n.by==='you'?` [${n.label}] ${strip(n.text)}`:'')).join('\n');
+ askCoach(coachRules()+'\nResponda em no máximo 170 palavras.\n\nPartida do aluno (ele jogou de '+(S.color==='w'?'brancas':'pretas')+'). Cada lance dele traz a nota e o comentário do motor:\n'+list+'\nResultado: '+S.overText+'\n\nTarefa: aponte os dois ou três padrões de erro que mais se repetiram, cite os lances como exemplo, e termine com um único treino concreto para a próxima semana.','default')});
+(async()=>{try{sample=window.claude&&window.claude.use?await window.claude.use('sample'):null}catch(e){sample=null}$('ask').hidden=!sample;renderCoach();renderPlay()})();
+renderCoach();
+$('level').value=store.level;$('color').value=store.color;$('aid').checked=store.aid;
+renderDrills();setTab('play');if(store.save)restore();else newGame();
+</script>
+</body></html>
