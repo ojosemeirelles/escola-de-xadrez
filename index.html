@@ -72,8 +72,20 @@ button{cursor:pointer}
 .tag.c0{color:var(--c0)}.tag.c1{color:var(--c1)}.tag.c2{color:var(--c2)}.tag.c3{color:var(--c3)}.tag.c4{color:var(--c4)}.tag.cpu{color:var(--muted)}
 .line{font-family:var(--mono);font-size:.85rem;color:var(--muted);overflow-wrap:anywhere}
 .acts{display:flex;flex-wrap:wrap;gap:8px}
-.aibox{border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:4px}
-.aibox p{font-size:.95rem;white-space:pre-wrap}
+.chatbox{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.chathead{display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:space-between;align-items:center}
+.mini{display:flex;gap:6px;align-items:center;font-size:.85rem}
+.mini input{accent-color:var(--accent)}
+.chat{max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.chat:empty{display:none}
+.msg{padding:8px 11px;border-radius:10px;font-size:.93rem;white-space:pre-wrap;max-width:94%;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--accent);color:var(--accent-fg)}
+.msg.co{align-self:flex-start;background:var(--soft)}
+.msg small{display:block;font:500 .68rem var(--mono);letter-spacing:.05em;text-transform:uppercase;opacity:.7;margin-bottom:2px}
+.sflines{display:flex;flex-direction:column;gap:4px;font:400 .85rem var(--mono)}
+.sflines div{display:flex;gap:10px}
+.sflines b{min-width:3.6em;font-weight:500;font-variant-numeric:tabular-nums}
+.sflines span{color:var(--muted);overflow-wrap:anywhere;min-width:0}
 .ask{display:flex;flex-wrap:wrap;gap:8px}
 .ask input{flex:1;min-width:0;flex-basis:200px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:.92rem}
 
@@ -124,19 +136,24 @@ button{cursor:pointer}
     <section class="left">
       <div class="evalrow" id="evalrow"><div class="evalbar"><i id="evalFill"></i></div><span id="evalTxt">Equilíbrio</span></div>
       <div class="boardbox"><div class="board" id="board"></div></div>
-      <div class="coach" aria-live="polite"><small id="coachLabel">Treinador</small><div id="coachBody"></div>
-        <div class="aibox" id="aiBox" hidden><small id="aiName"></small><p id="aiOut"></p></div></div>
-      <form class="ask" id="ask" hidden>
-        <input id="q" type="text" maxlength="200" autocomplete="off" placeholder="Pergunte ao treinador sobre esta posição" aria-label="Pergunta ao treinador">
-        <button class="btn pri" id="btnAsk">Perguntar</button>
-        <button class="btn" id="btnStop" type="button" hidden>Parar</button>
-      </form>
+      <div class="coach" aria-live="polite"><small id="coachLabel">Treinador</small><div id="coachBody"></div></div>
       <div class="acts">
         <button class="btn" id="btnHint">Dica</button>
         <button class="btn" id="btnUndo">Voltar lance</button>
         <button class="btn" id="btnLive" hidden>Voltar à posição atual</button>
         <button class="btn" id="btnReset" hidden>Reiniciar</button>
         <button class="btn pri" id="btnNext" hidden>Próximo</button>
+      </div>
+      <div class="chatbox">
+        <div class="chathead"><span class="lab" id="chatName">Conversa com o treinador</span>
+          <label class="mini" id="autoLab" hidden><input type="checkbox" id="auto"> Comentar cada lance</label></div>
+        <div class="chat" id="chat" aria-live="polite"></div>
+        <p class="muted" id="chatOff">Conectando ao treinador…</p>
+        <form class="ask" id="ask" hidden>
+          <input id="q" type="text" maxlength="300" autocomplete="off" placeholder="Pergunte ao treinador sobre esta posição" aria-label="Pergunta ao treinador">
+          <button class="btn pri" id="btnAsk">Perguntar</button>
+          <button class="btn" id="btnStop" type="button" hidden>Parar</button>
+        </form>
       </div>
     </section>
 
@@ -150,6 +167,8 @@ button{cursor:pointer}
         </div>
         <p class="muted" id="coachInfo"></p>
         <label class="aid"><input type="checkbox" id="aid"><span>Ajuda visual<span>Borda vermelha: peça sua em perigo. Borda verde: peça dele que dá para ganhar.</span></span></label>
+        <div class="box"><label class="aid"><input type="checkbox" id="showSf"><span>Mostrar análise do Stockfish<span id="sfStatus">Carregando o motor…</span></span></label>
+          <div class="sflines" id="sfLines" hidden></div></div>
         <div class="box"><span class="lab" id="gameLab">Partida</span><p class="muted" id="opening"></p><div class="moves" id="moves"></div><p class="muted">Toque em um lance para rever a posição e o comentário.</p></div>
         <div class="box" id="summary" hidden></div>
         <p class="muted" id="stats"></p>
@@ -336,7 +355,7 @@ const join=a=>a.length<2?a.join(''):a.slice(0,-1).join(', ')+' e '+a[a.length-1]
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const sanPT=s=>s.replace(/^[KQRBN]/,c=>PT[c.toLowerCase()]).replace(/=([QRBN])/,(_,c)=>'='+PT[c.toLowerCase()]);
 
-let store={pz:{},pzTheme:'all',level:1,color:'w',aid:true,coach:0,stats:{w:0,l:0,d:0},errs:[],done:{},wk:0,save:null};
+let store={auto:true,showSf:true,pz:{},pzTheme:'all',level:1,color:'w',aid:true,coach:0,stats:{w:0,l:0,d:0},errs:[],done:{},wk:0,save:null};
 try{Object.assign(store,JSON.parse(localStorage.getItem('escola-xadrez')||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem('escola-xadrez',JSON.stringify(store))}catch(e){}};
 
@@ -359,7 +378,7 @@ const sfReady=new Promise(res=>{try{const w=new Worker(SA?URL.createObjectURL(ne
  w.onerror=()=>{if(!ok){clearTimeout(t);res(false)}};w.postMessage('uci')}catch(e){res(false)}});
 function sfRun(fen,depth,pv,ms,moves){return new Promise(res=>{const lines={};
  sfCb=l=>{if(l.startsWith('info')&&l.includes(' pv ')&&!l.includes('bound')){const k=l.match(/multipv (\d+)/),sc=l.match(/score (cp|mate) (-?\d+)/),p=l.match(/ pv (\S+)/);
-   if(sc&&p){const n=+sc[2];lines[k?+k[1]:1]={from:p[1].slice(0,2),to:p[1].slice(2,4),promo:p[1][4]||null,score:sc[1]==='cp'?n:(n>0?100000-n:-100000-n)}}}
+   if(sc&&p){const n=+sc[2];const pv=l.split(' pv ')[1].trim().split(' ').slice(0,6),dp=l.match(/depth (\d+)/);lines[k?+k[1]:1]={from:p[1].slice(0,2),to:p[1].slice(2,4),promo:p[1][4]||null,score:sc[1]==='cp'?n:(n>0?100000-n:-100000-n),pv,depth:dp?+dp[1]:0}}}
   else if(l.startsWith('bestmove')){sfCb=null;res(Object.keys(lines).sort((a,b)=>a-b).map(k=>lines[k]))}};
  sf.postMessage('setoption name MultiPV value '+pv);sf.postMessage('position fen '+fen);
  sf.postMessage('go depth '+depth+' movetime '+ms+(moves?' searchmoves '+moves.join(' '):''))})}
@@ -435,7 +454,7 @@ const S={mode:'play',game:new Chess(),startFen:START,color:'w',level:1,notes:[],
  hintStage:0,hintSq:[],sel:null,targets:[],last:[],drill:null,fix:null,sc:null};
 let epoch=0,tab='play',wk=Math.min(store.wk||0,WEEKS.length-1);
 
-function say(label,html){$('coachLabel').textContent=label;$('coachBody').innerHTML=html;if(!aiBusy)$('aiBox').hidden=true}
+function say(label,html){$('coachLabel').textContent=label;$('coachBody').innerHTML=html}
 function moveLabel(i){const st=S.startFen.split(' '),sb=st[1]==='b',ply=i+(sb?1:0),no=+st[5]+(ply>>1);return no+(ply%2?'...':'.')+' '+sanPT(S.notes[i].raw)}
 function noteHtml(i){const n=S.notes[i];return n.by==='you'
  ?`<p><span class="tag c${n.cls}">${n.label}</span><b>${moveLabel(i)}</b> ${n.text}</p>`
@@ -447,7 +466,13 @@ function intro(){return S.drill?`<p>${S.drill.g}</p>`:`<p>Você joga de ${S.colo
 
 function requestPre(){if(S.over)return;const ep=epoch;S.pre=null;
  S.prePromise=analyze(S.game.fen(),PRE).then(l=>{if(ep!==epoch)return null;S.pre=l;updateEval();return l})}
-function updateEval(){if(!S.pre||S.mode!=='play')return;const s=S.pre[0].score,w=S.game.turn()==='w'?s:-s,a=Math.abs(w);
+const fmtSc=x=>Math.abs(x)>90000?(x>0?'mate+':'mate-'):(x>0?'+':'')+(x/100).toFixed(1);
+function renderSf(){const el=$('sfLines');el.hidden=!store.showSf||S.mode!=='play';if(el.hidden)return;
+ if(S.over){el.innerHTML='<span class="muted">Partida encerrada.</span>';return}
+ if(!S.pre||S.game.turn()!==S.color){el.innerHTML='<span class="muted">Calculando…</span>';return}
+ const fen=S.game.fen();el.innerHTML=S.pre.slice(0,3).map(x=>{const g=new Chess(fen),out=[];for(const u of (x.pv||[x.from+x.to+(x.promo||'')])){const m=g.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||'q'});if(!m)break;out.push(sanPT(m.san))}
+  return `<div><b>${fmtSc(x.score)}</b><span>${out.join(' ')}</span></div>`}).join('')+`<span class="muted">Nota do seu ponto de vista, em peões. ${S.pre[0].depth?'Profundidade '+S.pre[0].depth+'.':''}</span>`}
+function updateEval(){renderSf();if(!S.pre||S.mode!=='play')return;const s=S.pre[0].score,w=S.game.turn()==='w'?s:-s,a=Math.abs(w);
  $('evalFill').style.width=(50+50*Math.tanh(w/600))+'%';
  $('evalTxt').textContent=a>90000?'Mate para as '+(w>0?'brancas':'pretas'):a<30?'Equilíbrio':(w>0?'Brancas':'Pretas')+' +'+(a/100).toFixed(1)}
 
@@ -456,7 +481,7 @@ function resetBoardState(){S.view=null;S.over=false;S.overText='';S.thinking=fal
 function newGame(o={}){epoch++;resetBoardState();S.mode='play';S.drill=o.drill||null;S.startFen=o.fen||START;S.game=new Chess(S.startFen);
  S.color=o.color||store.color;S.level=o.level!=null?o.level:store.level;S.notes=[];S.counted=false;S.fix=null;
  $('evalFill').style.width='50%';$('evalTxt').textContent='Equilíbrio';
- showLive();persist();renderPlay();if(S.game.turn()!==S.color)engineTurn(epoch);else requestPre();draw()}
+ turns=[];$('chat').innerHTML='';showLive();persist();renderPlay();if(S.game.turn()!==S.color)engineTurn(epoch);else requestPre();renderSf();draw()}
 function restore(){const v=store.save;if(!v)return newGame();epoch++;resetBoardState();S.mode='play';S.drill=v.drill||null;S.startFen=v.fen;S.color=v.color;S.level=v.level;S.counted=!!v.counted;S.fix=null;
  S.game=new Chess(v.fen);S.notes=[];for(const n of v.notes||[]){if(!S.game.move(n.raw))break;S.notes.push(n)}
  const h=S.game.history({verbose:true});if(h.length)S.last=[h[h.length-1].from,h[h.length-1].to];
@@ -479,7 +504,7 @@ async function engineTurn(ep){S.thinking=true;draw();const L=LEVELS[S.level],fen
  const best=list[0].score,c=list.filter(x=>best-x.score<=L.band),pick=c[Math.random()*c.length|0];
  const em=S.game.move({from:pick.from,to:pick.to,promotion:pick.promo||'q'});S.last=[em.from,em.to];
  S.notes.push({raw:em.san,by:'cpu',cls:null,text:engineText(fen,em)});S.thinking=false;
- const over=checkOver();showLive();renderPlay();persist();if(!over)requestPre();draw()}
+ const over=checkOver();showLive();renderPlay();persist();if(!over){requestPre();if(store.auto&&sample)S.prePromise.then(l=>{if(ep===epoch&&l)autoComment()})}renderSf();draw()}
 function engineText(fen,em){const g=S.game;let t=cap(join(reasons(fen,em)))+'.';if(g.game_over())return t;
  if(g.in_check())t+=' Você está em xeque.';
  const h=hanging(g,S.color),mt=mateThreat(g);
@@ -573,16 +598,25 @@ function posContext(){const g=S.game,fen=g.fen(),me=S.color;let t=`Posição (FE
  const n=S.notes.length;if(n)t+='\nComentários automáticos dos últimos lances: '+S.notes.slice(-2).map((x,i)=>moveLabel(n-Math.min(2,n)+i)+': '+strip(x.text)).join(' | ');
  if(S.over)t+='\nA partida terminou: '+S.overText;
  return t}
-function aiErr(code){return code==='rate_limited'?'Limite de uso atingido. Tente de novo mais tarde.':code==='session_expired'?'Sua sessão expirou. Entre de novo no Claude.':code==='refused'?'O treinador não pôde responder a essa pergunta.':'Não foi possível falar com o treinador agora. Tente de novo.'}
-async function askCoach(prompt,tier){if(!sample||aiBusy)return;aiBusy=true;aiCtl=new AbortController();
- $('aiBox').hidden=false;$('aiName').textContent=COACHES[store.coach].n;$('aiOut').textContent='Pensando…';$('btnAsk').disabled=true;$('btnStop').hidden=false;
- try{const r=await sample(prompt,{modelTier:tier,cache:false,signal:aiCtl.signal,onText:({text})=>{$('aiOut').textContent=text}});
-  if(r.truncated)$('aiOut').textContent+=' (resposta cortada)'}
- catch(e){if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(e&&e.code)){sample=null;$('ask').hidden=true;$('aiBox').hidden=true;renderPlay()}
-  else if(e&&e.code==='cancelled')$('aiOut').textContent=e.text||'Interrompido.';
-  else $('aiOut').textContent=(e&&e.text?e.text+' ':'')+aiErr(e&&e.code)}
- finally{aiBusy=false;$('btnAsk').disabled=false;$('btnStop').hidden=true}}
-function renderCoach(){const c=COACHES[store.coach];$('coachInfo').textContent=`${c.n}: treinador fictício, inspirado na escola de jogo de ${c.s}.`+(sample?' Ele responde às suas perguntas abaixo do tabuleiro.':'')}
+function aiErr(code){return code==='rate_limited'?'Limite de uso do Claude atingido. Tente de novo mais tarde.':code==='session_expired'?'Sua sessão expirou. Entre de novo no Claude.':code==='refused'?'Não posso responder a essa pergunta.':'Não consegui responder agora. Tente de novo.'}
+let turns=[],aiP=null;
+function addMsg(who,text,tag){const d=document.createElement('div');d.className='msg '+who;if(tag){const t=document.createElement('small');t.textContent=tag;d.appendChild(t)}const b=document.createElement('span');b.textContent=text;d.appendChild(b);$('chat').appendChild(d);$('chat').scrollTop=1e6;return b}
+function chatState(){const on=!!sample;$('ask').hidden=!on;$('autoLab').hidden=!on;$('chatOff').hidden=on;
+ if(!on)$('chatOff').textContent=window.claude?'A conversa com o treinador não está disponível nesta visualização. Ela precisa da sua permissão para usar o Claude: recarregue a página e, quando o aviso aparecer, permita.':'Esta é a versão fora do Claude: a conversa com o treinador só funciona com o app aberto dentro do Claude. O comentário automático de cada lance e a análise do Stockfish continuam funcionando.';
+ $('chatName').textContent='Conversa com '+COACHES[store.coach].n}
+async function talk(shown,content,tier,memo,tag){if(!sample)return;if(aiCtl)aiCtl.abort();if(aiP)await aiP;
+ if(shown)addMsg('me',shown);const el=addMsg('co','Pensando…',tag||COACHES[store.coach].n),ctl=aiCtl=new AbortController();aiBusy=true;$('btnStop').hidden=false;
+ const input=[{role:'user',content:coachRules()},...turns.slice(-6),{role:'user',content}];
+ aiP=sample(input,{modelTier:tier,cache:false,signal:ctl.signal,onText:({text})=>{el.textContent=text;$('chat').scrollTop=1e6}})
+  .then(r=>{el.textContent=r.text+(r.truncated?' (resposta cortada)':'');turns.push({role:'user',content:memo},{role:'assistant',content:r.text})},
+   e=>{const c=e&&e.code;if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(c)){sample=null;el.parentNode.remove();chatState();renderPlay()}
+    else if(c==='cancelled'){if(e.text)el.textContent=e.text;else el.parentNode.remove()}
+    else{el.textContent=(e&&e.text?e.text+' ':'')+aiErr(c);if(c==='rate_limited'&&store.auto){store.auto=false;$('auto').checked=false;save()}}})
+  .finally(()=>{if(aiCtl===ctl){aiBusy=false;aiCtl=null;$('btnStop').hidden=true}});
+ return aiP}
+function autoComment(){const n=S.notes.length,lab=n?moveLabel(n-1):'';
+ talk('',posContext()+'\n\nTarefa: em no máximo 70 palavras, ajude o aluno a pensar o próximo lance, em três linhas curtas que começam com "Ameaça:", "Ideia:" e "Pergunta:". Em "Ameaça", diga o que o último lance do adversário quer. Em "Ideia", diga que tipo de plano ou tema procurar, sem revelar o lance exato. Em "Pergunta", faça uma pergunta que leve o aluno a achar o lance sozinho. Se o último lance do aluno foi um erro, comece com uma frase dizendo o que ele deixou passar.','quick','[O treinador comentou a posição depois de '+lab+']','Depois de '+lab)}
+function renderCoach(){const c=COACHES[store.coach];$('coachInfo').textContent=`${c.n}: treinador fictício, inspirado na escola de jogo de ${c.s}.`;chatState()}
 
 /* ---------- desenho ---------- */
 function draw(){const g=S.view!=null?S.viewG:S.game,o=S.color,hm=new Set,ho=new Set,live=S.view==null;
@@ -651,14 +685,18 @@ $('wkSel').addEventListener('click',ev=>{const b=ev.target.closest('[data-w]');i
 $('exlist').addEventListener('click',ev=>{const b=ev.target.closest('[data-e]');if(b)loadEx(+b.dataset.e)});
 
 $('coachSel').innerHTML=COACHES.map((c,i)=>`<option value="${i}">${c.n}</option>`).join('');$('coachSel').value=store.coach;
-$('coachSel').onchange=e=>{store.coach=+e.target.value;save();renderCoach()};
+$('coachSel').onchange=e=>{store.coach=+e.target.value;save();renderCoach()};$('chatName').textContent='Conversa com '+COACHES[store.coach].n;
 $('ask').addEventListener('submit',ev=>{ev.preventDefault();const q=$('q').value.trim()||'Explique esta posição: o que devo observar e qual é o plano?';$('q').value='';
- askCoach(coachRules()+'\nResponda em no máximo 110 palavras.\n\n'+posContext()+'\n\nPergunta do aluno: '+q,'quick')});
+ talk(q,posContext()+'\n\nPergunta do aluno: '+q+'\nResponda em no máximo 110 palavras.','quick',q)});
 $('btnStop').onclick=()=>aiCtl&&aiCtl.abort();
+$('auto').checked=store.auto;$('auto').onchange=e=>{store.auto=e.target.checked;save();if(store.auto&&S.mode==='play'&&!S.over&&S.pre&&S.game.turn()===S.color)autoComment()};
+$('showSf').checked=store.showSf;$('showSf').onchange=e=>{store.showSf=e.target.checked;save();renderSf()};
+sfReady.then(ok=>{$('sfStatus').textContent=ok?'Motor ativo: Stockfish 10, rodando no seu aparelho. As três melhores continuações para você, com a nota de cada uma.':'O Stockfish não carregou. Está em uso o motor reserva, mais fraco.'});
 $('summary').addEventListener('click',ev=>{if(!ev.target.closest('[data-review]'))return;
  const list=S.notes.map((n,i)=>moveLabel(i)+(n.by==='you'?` [${n.label}] ${strip(n.text)}`:'')).join('\n');
- askCoach(coachRules()+'\nResponda em no máximo 170 palavras.\n\nPartida do aluno (ele jogou de '+(S.color==='w'?'brancas':'pretas')+'). Cada lance dele traz a nota e o comentário do motor:\n'+list+'\nResultado: '+S.overText+'\n\nTarefa: aponte os dois ou três padrões de erro que mais se repetiram, cite os lances como exemplo, e termine com um único treino concreto para a próxima semana.','default')});
-(async()=>{try{sample=window.claude&&window.claude.use?await window.claude.use('sample'):null}catch(e){sample=null}$('ask').hidden=!sample;renderCoach();renderPlay()})();
+ talk('Analise minha partida.','Partida do aluno (ele jogou de '+(S.color==='w'?'brancas':'pretas')+'). Cada lance dele traz a nota e o comentário do motor:\n'+list+'\nResultado: '+S.overText+'\n\nTarefa: em no máximo 170 palavras, aponte os dois ou três padrões de erro que mais se repetiram, cite os lances como exemplo, e termine com um único treino concreto para a próxima semana.','default','Analise minha partida.')});
+(async()=>{try{sample=window.claude&&window.claude.use?await window.claude.use('sample'):null}catch(e){sample=null}renderCoach();renderPlay();
+ if(sample&&store.auto&&S.mode==='play'&&!S.over&&S.notes.length&&S.game.turn()===S.color){const ep=epoch;(S.pre?Promise.resolve(S.pre):S.prePromise).then(l=>{if(ep===epoch&&l&&!turns.length)autoComment()})}})();
 renderCoach();
 $('level').value=store.level;$('color').value=store.color;$('aid').checked=store.aid;
 renderDrills();setTab('play');if(store.save)restore();else newGame();
